@@ -951,7 +951,14 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${packName.replace(/[^a-z0-9_-]/gi, "_")}.zip`;
+      // Strip §X format codes before sanitizing so they don't become underscores in the filename
+      const safeFilename = packName
+        .replace(/§[0-9a-fk-or]/gi, "")   // remove §X codes
+        .replace(/[^a-z0-9 _-]/gi, "")    // remove other illegal chars
+        .trim()
+        .replace(/\s+/g, "_")             // spaces → underscores
+        || "resource_pack";
+      a.download = `${safeFilename}.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
