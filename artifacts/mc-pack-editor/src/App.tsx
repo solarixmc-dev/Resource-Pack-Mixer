@@ -978,7 +978,6 @@ export default function App() {
       <header className="flex-shrink-0 border-b border-border bg-card px-4 py-3">
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xl">⛏️</span>
             <h1 className="text-base font-bold text-foreground">MC Resource Pack Editor</h1>
             <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">1.8</span>
           </div>
@@ -1046,25 +1045,10 @@ export default function App() {
       {packs.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center max-w-md px-8">
-            <div className="text-6xl mb-4">🎮</div>
             <h2 className="text-xl font-bold mb-2">Minecraft 1.8 Resource Pack Editor</h2>
-            <p className="text-muted-foreground text-sm mb-6">
+            <p className="text-muted-foreground text-sm">
               Upload one or more resource pack ZIP files above to compare textures, set default sources per folder, override individual textures, and export a merged pack.
             </p>
-            <div className="grid grid-cols-2 gap-3 text-left text-sm">
-              {[
-                ["📦", "Upload multiple ZIPs", "Compare packs side by side"],
-                ["📁", "Set folder sources", "Pick which pack to use per folder"],
-                ["🎯", "Override textures", "Select individual textures from any pack"],
-                ["⬇️", "Export merged ZIP", "Download a new merged resource pack"],
-              ].map(([icon, title, desc]) => (
-                <div key={title} className="bg-card border border-border rounded-lg p-3">
-                  <div className="text-xl mb-1">{icon}</div>
-                  <div className="font-medium text-sm">{title}</div>
-                  <div className="text-xs text-muted-foreground">{desc}</div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       ) : (
