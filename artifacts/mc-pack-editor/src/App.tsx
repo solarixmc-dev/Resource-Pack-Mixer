@@ -5,6 +5,7 @@ import {
   getTexturesForFolder,
   getAllFoldersInPacks,
   getAllTexturePathsInFolder,
+  getTextureFolder,
   arrayBufferToDataURL,
   isImagePath,
   exportMergedPack,
@@ -881,6 +882,78 @@ function TextureGrid({
   );
 }
 
+// ─── Search All Results ─────────────────────────────────────────────────────────
+
+function SearchAllResults({
+  query,
+  packs,
+  folderSources,
+  textureOverrides,
+  onOverride,
+}: {
+  query: string;
+  packs: Pack[];
+  folderSources: FolderSources;
+  textureOverrides: TextureOverrides;
+  onOverride: (path: string, packId: string | null) => void;
+}) {
+  const allPaths = useMemo(() => {
+    const set = new Set<string>();
+    for (const pack of packs) {
+      pack.files.forEach((_, p) => {
+        if (p !== "pack.mcmeta" && p !== "pack.png") set.add(p);
+      });
+    }
+    return [...set].sort();
+  }, [packs]);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return allPaths.filter((p) => p.toLowerCase().includes(q));
+  }, [allPaths, query]);
+
+  if (!filtered.length) {
+    return (
+      <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground">
+        <span className="text-3xl">🔍</span>
+        <p className="text-sm">No textures match <strong className="text-foreground">"{query}"</strong></p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-muted-foreground">
+        {filtered.length} result{filtered.length !== 1 ? "s" : ""} across all folders
+      </p>
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}
+      >
+        {filtered.map((path) => {
+          const parts = path.split("/");
+          const displayName = parts[parts.length - 1];
+          const folder = getTextureFolder(path);
+          return (
+            <div key={path} className="flex flex-col gap-0.5">
+              <TextureCard
+                texturePath={path}
+                displayName={displayName}
+                packs={packs}
+                folderSources={folderSources}
+                textureOverrides={textureOverrides}
+                folder={folder}
+                onOverride={onOverride}
+              />
+              <span className="text-[10px] text-muted-foreground text-center truncate px-1">{folder}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -893,6 +966,7 @@ export default function App() {
   const [packIcon, setPackIcon] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [globalSearch, setGlobalSearch] = useState("");
 
   const handlePacksLoaded = useCallback((newPacks: Pack[]) => {
     setPacks((prev) => {
@@ -951,12 +1025,10 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      // Strip §X format codes before sanitizing so they don't become underscores in the filename
+      // § is valid Unicode and Minecraft renders it as color — only strip truly illegal filename chars
       const safeFilename = packName
-        .replace(/§[0-9a-fk-or]/gi, "")   // remove §X codes
-        .replace(/[^a-z0-9 _-]/gi, "")    // remove other illegal chars
+        .replace(/[\\/:*?"<>|\x00-\x1f]/g, "")  // illegal on Windows/macOS/Linux
         .trim()
-        .replace(/\s+/g, "_")             // spaces → underscores
         || "resource_pack";
       a.download = `${safeFilename}.zip`;
       a.click();
@@ -1087,9 +1159,14 @@ export default function App() {
 
           {/* Main content */}
           <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
-            {/* Folder header */}
+            {/* Folder header + global search */}
             <div className="flex-shrink-0 px-4 py-2 border-b border-border flex items-center gap-3">
-              {(() => {
+              {globalSearch ? (
+                <>
+                  <span className="text-lg">🔍</span>
+                  <span className="font-semibold">Search results</span>
+                </>
+              ) : (() => {
                 const meta = MC_FOLDERS.find((f) => f.key === selectedFolder);
                 return (
                   <>
@@ -1098,22 +1175,41 @@ export default function App() {
                   </>
                 );
               })()}
-              {packs.length > 1 && (
-                <span className="text-xs text-muted-foreground ml-auto">
-                  Click a texture preview to select which pack to use • Click pack name below to set folder-wide default
-                </span>
-              )}
+              <div className="ml-auto flex items-center gap-2">
+                <input
+                  type="search"
+                  placeholder="Search all textures…"
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  className="bg-secondary border border-border rounded px-3 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-48"
+                />
+                {!globalSearch && packs.length > 1 && (
+                  <span className="text-xs text-muted-foreground hidden xl:block">
+                    Click preview to pick pack • Click name for folder default
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Texture grid */}
+            {/* Texture grid or search results */}
             <div className="flex-1 overflow-y-auto p-4">
-              <TextureGrid
-                packs={packs}
-                folder={selectedFolder}
-                folderSources={folderSources}
-                textureOverrides={textureOverrides}
-                onOverride={handleOverride}
-              />
+              {globalSearch ? (
+                <SearchAllResults
+                  query={globalSearch}
+                  packs={packs}
+                  folderSources={folderSources}
+                  textureOverrides={textureOverrides}
+                  onOverride={handleOverride}
+                />
+              ) : (
+                <TextureGrid
+                  packs={packs}
+                  folder={selectedFolder}
+                  folderSources={folderSources}
+                  textureOverrides={textureOverrides}
+                  onOverride={handleOverride}
+                />
+              )}
             </div>
           </main>
         </div>

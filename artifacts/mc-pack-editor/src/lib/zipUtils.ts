@@ -135,8 +135,12 @@ export async function exportMergedPack(
     pack.files.forEach((_, path) => allPaths.add(path));
   }
 
-  // Write pack.mcmeta
-  const mcmeta = JSON.stringify({ pack: { pack_format: 1, description: packDescription } }, null, 2);
+  // Write pack.mcmeta — preserve § codes in both name and description
+  const mcmeta = JSON.stringify(
+    { pack: { pack_format: 1, description: packDescription, name: packName } },
+    null,
+    2
+  );
   zip.file("pack.mcmeta", mcmeta);
 
   // Write pack icon
