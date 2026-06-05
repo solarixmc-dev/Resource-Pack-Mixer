@@ -156,17 +156,14 @@ function PackOrderPanel({
   packs,
   onReorder,
   onRemove,
-  onColorChange,
 }: {
   packs: Pack[];
   onReorder: (newOrder: Pack[]) => void;
   onRemove: (id: string) => void;
-  onColorChange: (id: string, color: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
-  const [colorPickerPackId, setColorPickerPackId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -275,27 +272,11 @@ function PackOrderPanel({
                     {PRIORITY_LABELS[i] ?? `${i + 1}th`}
                   </span>
 
-                  {/* Color dot — click to open picker */}
-                  <div className="relative flex-shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setColorPickerPackId(
-                          colorPickerPackId === pack.id ? null : pack.id
-                        );
-                      }}
-                      className="w-4 h-4 rounded-full border-2 border-white/20 hover:scale-125 transition-transform cursor-pointer focus:outline-none"
-                      style={{ background: pack.color }}
-                      title="Change color"
-                    />
-                    {colorPickerPackId === pack.id && (
-                      <ColorPicker
-                        value={pack.color}
-                        onChange={(c) => onColorChange(pack.id, c)}
-                        onClose={() => setColorPickerPackId(null)}
-                      />
-                    )}
-                  </div>
+                  {/* Color dot (static) */}
+                  <span
+                    className="w-3.5 h-3.5 rounded-full flex-shrink-0 border border-white/20"
+                    style={{ background: pack.color }}
+                  />
                   <span className="text-sm text-foreground font-medium flex-1 truncate">
                     {pack.name}
                   </span>
@@ -383,6 +364,36 @@ function DropZone({ onLoad }: { onLoad: (packs: Pack[]) => void }) {
   );
 }
 
+// ─── Minecraft format codes ────────────────────────────────────────────────────
+
+const MC_COLORS = [
+  { code: "§0", color: "#000000", label: "Black" },
+  { code: "§1", color: "#0000AA", label: "Dark Blue" },
+  { code: "§2", color: "#00AA00", label: "Dark Green" },
+  { code: "§3", color: "#00AAAA", label: "Dark Aqua" },
+  { code: "§4", color: "#AA0000", label: "Dark Red" },
+  { code: "§5", color: "#AA00AA", label: "Dark Purple" },
+  { code: "§6", color: "#FFAA00", label: "Gold" },
+  { code: "§7", color: "#AAAAAA", label: "Gray" },
+  { code: "§8", color: "#555555", label: "Dark Gray" },
+  { code: "§9", color: "#5555FF", label: "Blue" },
+  { code: "§a", color: "#55FF55", label: "Green" },
+  { code: "§b", color: "#55FFFF", label: "Aqua" },
+  { code: "§c", color: "#FF5555", label: "Red" },
+  { code: "§d", color: "#FF55FF", label: "Light Purple" },
+  { code: "§e", color: "#FFFF55", label: "Yellow" },
+  { code: "§f", color: "#FFFFFF", label: "White" },
+];
+
+const MC_FORMATS = [
+  { code: "§k", label: "Obf", title: "Obfuscated (§k)", style: {} },
+  { code: "§l", label: "B",   title: "Bold (§l)",        style: { fontWeight: "bold" as const } },
+  { code: "§m", label: "S",   title: "Strikethrough (§m)", style: { textDecoration: "line-through" } },
+  { code: "§n", label: "U",   title: "Underline (§n)",   style: { textDecoration: "underline" } },
+  { code: "§o", label: "I",   title: "Italic (§o)",      style: { fontStyle: "italic" as const } },
+  { code: "§r", label: "R",   title: "Reset (§r)",       style: {} },
+];
+
 // ─── Pack Settings ─────────────────────────────────────────────────────────────
 
 function PackSettings({
@@ -401,6 +412,9 @@ function PackSettings({
   onIconChange: (d: string | null) => void;
 }) {
   const iconRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const descRef = useRef<HTMLInputElement>(null);
+  const [activeField, setActiveField] = useState<"name" | "desc">("desc");
 
   const handleIcon = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -410,8 +424,24 @@ function PackSettings({
     reader.readAsDataURL(f);
   };
 
+  const insertCode = (code: string) => {
+    const ref = activeField === "name" ? nameRef : descRef;
+    const onChange = activeField === "name" ? onNameChange : onDescriptionChange;
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const newValue = el.value.slice(0, start) + code + el.value.slice(end);
+    onChange(newValue);
+    requestAnimationFrame(() => {
+      el.setSelectionRange(start + code.length, start + code.length);
+      el.focus();
+    });
+  };
+
   return (
     <div className="flex items-start gap-3">
+      {/* Pack icon */}
       <button
         className="w-12 h-12 rounded border border-border flex-shrink-0 overflow-hidden checkered hover:border-primary transition-colors cursor-pointer mt-5"
         onClick={() => iconRef.current?.click()}
@@ -424,26 +454,77 @@ function PackSettings({
         )}
         <input ref={iconRef} type="file" accept="image/*" className="hidden" onChange={handleIcon} />
       </button>
+
       <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+        {/* Pack name */}
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground font-medium">Output Pack Name</label>
           <input
+            ref={nameRef}
             type="text"
             value={packName}
+            onFocus={() => setActiveField("name")}
             onChange={(e) => onNameChange(e.target.value)}
             className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
             placeholder="My Resource Pack"
           />
         </div>
+
+        {/* Description */}
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted-foreground font-medium">Description <span className="opacity-60">(pack.mcmeta)</span></label>
+          <label className="text-xs text-muted-foreground font-medium">
+            Description <span className="opacity-60">(pack.mcmeta)</span>
+          </label>
           <input
+            ref={descRef}
             type="text"
             value={packDescription}
+            onFocus={() => setActiveField("desc")}
             onChange={(e) => onDescriptionChange(e.target.value)}
             className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
             placeholder="A Minecraft resource pack"
           />
+        </div>
+
+        {/* Format code toolbar */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground font-medium">Format codes</label>
+            <span className="text-xs text-primary">
+              → inserting into <span className="font-semibold">{activeField === "name" ? "Name" : "Description"}</span>
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1 p-1.5 bg-secondary/50 rounded border border-border overflow-y-auto" style={{ maxHeight: 72 }}>
+            {/* Color codes */}
+            {MC_COLORS.map(({ code, color, label }) => (
+              <button
+                key={code}
+                onMouseDown={(e) => { e.preventDefault(); insertCode(code); }}
+                className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold hover:scale-110 transition-transform flex-shrink-0 border border-white/10"
+                style={{
+                  background: color === "#000000" || color === "#555555" ? color : color,
+                  color: ["#000000","#555555","#0000AA","#00AA00","#00AAAA","#AA0000","#AA00AA"].includes(color) ? "#fff" : "#000",
+                }}
+                title={`${label} (${code})`}
+              >
+                A
+              </button>
+            ))}
+            {/* Separator */}
+            <div className="w-px h-6 bg-border flex-shrink-0 mx-0.5" />
+            {/* Format codes */}
+            {MC_FORMATS.map(({ code, label, title, style }) => (
+              <button
+                key={code}
+                onMouseDown={(e) => { e.preventDefault(); insertCode(code); }}
+                className="px-2 h-6 rounded text-xs bg-muted hover:bg-accent text-foreground transition-colors flex-shrink-0 border border-border"
+                style={style}
+                title={title}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -484,7 +565,7 @@ function FolderSidebar({
           onClick={() => onSelect(key)}
         >
           <span>{icon}</span>
-          <span className={`flex-1 truncate font-medium ${active ? "text-primary" : "text-foreground"}`}>
+          <span className={`flex-1 font-medium leading-snug ${active ? "text-primary" : "text-foreground"}`}>
             {label}
           </span>
         </button>
@@ -500,7 +581,7 @@ function FolderSidebar({
             {packs.map((p) => (
               <button
                 key={p.id}
-                className={`text-xs px-2 py-0.5 rounded transition-colors truncate max-w-[80px] ${sourcePackId === p.id ? "font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+                className={`text-xs px-2 py-0.5 rounded transition-colors ${sourcePackId === p.id ? "font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
                 style={sourcePackId === p.id ? { background: p.color + "33", color: p.color } : {}}
                 onClick={(e) => { e.stopPropagation(); onFolderSource(key, p.id); }}
                 title={p.name}
@@ -824,7 +905,6 @@ export default function App() {
                   packs={packs}
                   onReorder={reorderPacks}
                   onRemove={removePack}
-                  onColorChange={handleColorChange}
                 />
                 <div className="flex items-center gap-2 flex-wrap">
                   {packs.map((p) => (
