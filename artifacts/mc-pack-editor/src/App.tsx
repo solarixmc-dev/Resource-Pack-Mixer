@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect, DragEvent } from "react";
 import { Pack, MC_FOLDERS, TextureOverrides, FolderSources } from "./types";
 import {
   loadPackFromFile,
@@ -59,6 +59,160 @@ function Btn({
     >
       {children}
     </button>
+  );
+}
+
+// ─── Pack Order Panel ──────────────────────────────────────────────────────────
+
+function PackOrderPanel({
+  packs,
+  onReorder,
+  onRemove,
+}: {
+  packs: Pack[];
+  onReorder: (newOrder: Pack[]) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  const handleDocClick = useCallback((e: MouseEvent) => {
+    if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      setOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("mousedown", handleDocClick);
+    return () => document.removeEventListener("mousedown", handleDocClick);
+  }, [handleDocClick]);
+
+  const handleDragStart = (e: DragEvent<HTMLDivElement>, index: number) => {
+    e.dataTransfer.effectAllowed = "move";
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setOverIndex(index);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>, dropIndex: number) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null);
+      setOverIndex(null);
+      return;
+    }
+    const next = [...packs];
+    const [moved] = next.splice(dragIndex, 1);
+    next.splice(dropIndex, 0, moved);
+    onReorder(next);
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  const PRIORITY_LABELS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+
+  return (
+    <div ref={containerRef} className="relative flex flex-col min-w-0">
+      {/* Trigger button */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 px-3 py-1.5 rounded border border-border bg-secondary hover:bg-accent text-sm font-medium transition-colors cursor-pointer select-none"
+      >
+        <span className="text-base">⇅</span>
+        <span>Pack Priority</span>
+        <div className="flex items-center gap-1 mx-1">
+          {packs.map((p) => (
+            <span
+              key={p.id}
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ background: p.color }}
+            />
+          ))}
+        </div>
+        <span className="text-muted-foreground text-xs ml-auto">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div className="absolute top-full left-0 z-50 mt-1 w-72 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+          <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Auto priority order
+            </span>
+            <span className="text-xs text-muted-foreground">drag to reorder</span>
+          </div>
+          <p className="px-3 pt-2 pb-1 text-xs text-muted-foreground">
+            When set to <span className="text-primary font-medium">auto</span>, the first pack is preferred. Textures missing from it fall through to the next pack.
+          </p>
+          <div className="p-2 flex flex-col gap-1">
+            {packs.map((pack, i) => {
+              const isDragging = dragIndex === i;
+              const isOver = overIndex === i && dragIndex !== null && dragIndex !== i;
+              return (
+                <div
+                  key={pack.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, i)}
+                  onDragOver={(e) => handleDragOver(e, i)}
+                  onDrop={(e) => handleDrop(e, i)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex items-center gap-2 px-2 py-2 rounded border transition-all cursor-grab active:cursor-grabbing select-none
+                    ${isDragging ? "opacity-40 border-primary" : "border-transparent hover:border-border hover:bg-accent/50"}
+                    ${isOver ? "border-primary bg-primary/10" : ""}
+                  `}
+                >
+                  {/* Drag handle */}
+                  <span className="text-muted-foreground text-base leading-none flex-shrink-0">⋮⋮</span>
+
+                  {/* Priority badge */}
+                  <span
+                    className="text-xs font-bold w-7 text-center flex-shrink-0 rounded py-0.5"
+                    style={{ background: pack.color + "22", color: pack.color }}
+                  >
+                    {PRIORITY_LABELS[i] ?? `${i + 1}th`}
+                  </span>
+
+                  {/* Color dot + name */}
+                  <span
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ background: pack.color }}
+                  />
+                  <span className="text-sm text-foreground font-medium flex-1 truncate">
+                    {pack.name}
+                  </span>
+
+                  {/* File count */}
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    {pack.files.size.toLocaleString()} files
+                  </span>
+
+                  {/* Remove */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemove(pack.id); }}
+                    className="text-muted-foreground hover:text-destructive text-sm transition-colors flex-shrink-0"
+                    title="Remove pack"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -514,6 +668,10 @@ export default function App() {
     }
   }, [packs, folderSources, textureOverrides, packName, packIcon]);
 
+  const reorderPacks = useCallback((newOrder: Pack[]) => {
+    setPacks(newOrder);
+  }, []);
+
   const overrideCount = Object.keys(textureOverrides).length;
   const folderSourceCount = Object.values(folderSources).filter(Boolean).length;
 
@@ -528,24 +686,22 @@ export default function App() {
             <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">1.8</span>
           </div>
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 flex items-center gap-3">
             {packs.length === 0 ? (
               <p className="text-xs text-muted-foreground">Upload resource pack ZIPs to get started</p>
             ) : (
-              <div className="flex items-center gap-2 flex-wrap">
-                {packs.map((p) => (
-                  <div key={p.id} className="flex items-center gap-1">
-                    <Badge color={p.color} label={p.name} />
-                    <button
-                      onClick={() => removePack(p.id)}
-                      className="text-muted-foreground hover:text-destructive text-xs transition-colors"
-                      title="Remove pack"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <>
+                <PackOrderPanel
+                  packs={packs}
+                  onReorder={reorderPacks}
+                  onRemove={removePack}
+                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {packs.map((p) => (
+                    <Badge key={p.id} color={p.color} label={p.name} />
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
