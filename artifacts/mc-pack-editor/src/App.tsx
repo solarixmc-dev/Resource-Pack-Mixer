@@ -62,20 +62,104 @@ function Btn({
   );
 }
 
+// ─── Color Picker ──────────────────────────────────────────────────────────────
+
+const SWATCHES = [
+  "#4ade80","#22c55e","#16a34a","#166534",
+  "#60a5fa","#3b82f6","#2563eb","#1d4ed8",
+  "#f87171","#ef4444","#dc2626","#b91c1c",
+  "#fbbf24","#f59e0b","#d97706","#b45309",
+  "#a78bfa","#8b5cf6","#7c3aed","#6d28d9",
+  "#34d399","#10b981","#059669","#047857",
+  "#f472b6","#ec4899","#db2777","#be185d",
+  "#fb923c","#f97316","#ea580c","#c2410c",
+  "#38bdf8","#0ea5e9","#0284c7","#0369a1",
+  "#e879f9","#d946ef","#c026d3","#a21caf",
+  "#94a3b8","#64748b","#ffffff","#000000",
+];
+
+function ColorPicker({
+  value,
+  onChange,
+  onClose,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-[60] mt-1 p-2 bg-card border border-border rounded-lg shadow-xl"
+      style={{ width: 164 }}
+    >
+      <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(8, 1fr)" }}>
+        {SWATCHES.map((c) => (
+          <button
+            key={c}
+            onClick={() => { onChange(c); onClose(); }}
+            className="w-4 h-4 rounded-sm transition-transform hover:scale-125 focus:outline-none"
+            style={{
+              background: c,
+              outline: c === value ? "2px solid white" : "none",
+              outlineOffset: 1,
+            }}
+            title={c}
+          />
+        ))}
+      </div>
+      {/* Native color input for any color */}
+      <div className="mt-2 flex items-center gap-1.5">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-7 h-7 rounded cursor-pointer border border-border bg-transparent p-0"
+          title="Pick any color"
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (/^#[0-9a-fA-F]{6}$/.test(v)) onChange(v);
+          }}
+          className="flex-1 bg-secondary border border-border rounded px-2 py-1 text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary/50"
+          maxLength={7}
+          placeholder="#ffffff"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Pack Order Panel ──────────────────────────────────────────────────────────
 
 function PackOrderPanel({
   packs,
   onReorder,
   onRemove,
+  onColorChange,
 }: {
   packs: Pack[];
   onReorder: (newOrder: Pack[]) => void;
   onRemove: (id: string) => void;
+  onColorChange: (id: string, color: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [colorPickerPackId, setColorPickerPackId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -184,11 +268,27 @@ function PackOrderPanel({
                     {PRIORITY_LABELS[i] ?? `${i + 1}th`}
                   </span>
 
-                  {/* Color dot + name */}
-                  <span
-                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                    style={{ background: pack.color }}
-                  />
+                  {/* Color dot — click to open picker */}
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setColorPickerPackId(
+                          colorPickerPackId === pack.id ? null : pack.id
+                        );
+                      }}
+                      className="w-4 h-4 rounded-full border-2 border-white/20 hover:scale-125 transition-transform cursor-pointer focus:outline-none"
+                      style={{ background: pack.color }}
+                      title="Change color"
+                    />
+                    {colorPickerPackId === pack.id && (
+                      <ColorPicker
+                        value={pack.color}
+                        onChange={(c) => onColorChange(pack.id, c)}
+                        onClose={() => setColorPickerPackId(null)}
+                      />
+                    )}
+                  </div>
                   <span className="text-sm text-foreground font-medium flex-1 truncate">
                     {pack.name}
                   </span>
@@ -280,13 +380,17 @@ function DropZone({ onLoad }: { onLoad: (packs: Pack[]) => void }) {
 
 function PackSettings({
   packName,
+  packDescription,
   packIcon,
   onNameChange,
+  onDescriptionChange,
   onIconChange,
 }: {
   packName: string;
+  packDescription: string;
   packIcon: string | null;
   onNameChange: (n: string) => void;
+  onDescriptionChange: (d: string) => void;
   onIconChange: (d: string | null) => void;
 }) {
   const iconRef = useRef<HTMLInputElement>(null);
@@ -300,9 +404,9 @@ function PackSettings({
   };
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-start gap-3">
       <button
-        className="w-12 h-12 rounded border border-border flex-shrink-0 overflow-hidden checkered hover:border-primary transition-colors cursor-pointer"
+        className="w-12 h-12 rounded border border-border flex-shrink-0 overflow-hidden checkered hover:border-primary transition-colors cursor-pointer mt-5"
         onClick={() => iconRef.current?.click()}
         title="Click to change pack icon"
       >
@@ -313,15 +417,27 @@ function PackSettings({
         )}
         <input ref={iconRef} type="file" accept="image/*" className="hidden" onChange={handleIcon} />
       </button>
-      <div className="flex flex-col gap-1 flex-1 min-w-0">
-        <label className="text-xs text-muted-foreground font-medium">Output Pack Name</label>
-        <input
-          type="text"
-          value={packName}
-          onChange={(e) => onNameChange(e.target.value)}
-          className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
-          placeholder="My Resource Pack"
-        />
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground font-medium">Output Pack Name</label>
+          <input
+            type="text"
+            value={packName}
+            onChange={(e) => onNameChange(e.target.value)}
+            className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
+            placeholder="My Resource Pack"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground font-medium">Description <span className="opacity-60">(pack.mcmeta)</span></label>
+          <input
+            type="text"
+            value={packDescription}
+            onChange={(e) => onDescriptionChange(e.target.value)}
+            className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
+            placeholder="A Minecraft resource pack"
+          />
+        </div>
       </div>
     </div>
   );
@@ -599,6 +715,7 @@ export default function App() {
   const [folderSources, setFolderSources] = useState<FolderSources>({});
   const [textureOverrides, setTextureOverrides] = useState<TextureOverrides>({});
   const [packName, setPackName] = useState("My Resource Pack");
+  const [packDescription, setPackDescription] = useState("A Minecraft 1.8 Resource Pack");
   const [packIcon, setPackIcon] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -670,6 +787,10 @@ export default function App() {
 
   const reorderPacks = useCallback((newOrder: Pack[]) => {
     setPacks(newOrder);
+  }, []);
+
+  const handleColorChange = useCallback((id: string, color: string) => {
+    setPacks((prev) => prev.map((p) => (p.id === id ? { ...p, color } : p)));
   }, []);
 
   const overrideCount = Object.keys(textureOverrides).length;
