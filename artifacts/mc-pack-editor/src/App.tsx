@@ -88,6 +88,10 @@ function ColorPicker({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [hexInput, setHexInput] = useState(value);
+
+  // Keep local hex in sync when value changes from swatch/native picker
+  useEffect(() => { setHexInput(value); }, [value]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -96,6 +100,11 @@ function ColorPicker({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
+
+  const handleHexChange = (v: string) => {
+    setHexInput(v);
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) onChange(v);
+  };
 
   return (
     <div
@@ -118,7 +127,7 @@ function ColorPicker({
           />
         ))}
       </div>
-      {/* Native color input for any color */}
+      {/* Native color input + hex text */}
       <div className="mt-2 flex items-center gap-1.5">
         <input
           type="color"
@@ -129,14 +138,12 @@ function ColorPicker({
         />
         <input
           type="text"
-          value={value}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (/^#[0-9a-fA-F]{6}$/.test(v)) onChange(v);
-          }}
+          value={hexInput}
+          onChange={(e) => handleHexChange(e.target.value)}
           className="flex-1 bg-secondary border border-border rounded px-2 py-1 text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary/50"
           maxLength={7}
           placeholder="#ffffff"
+          spellCheck={false}
         />
       </div>
     </div>
@@ -770,6 +777,7 @@ export default function App() {
         folderSources,
         textureOverrides,
         packName,
+        packDescription,
         packIcon
       );
       const url = URL.createObjectURL(blob);
@@ -816,6 +824,7 @@ export default function App() {
                   packs={packs}
                   onReorder={reorderPacks}
                   onRemove={removePack}
+                  onColorChange={handleColorChange}
                 />
                 <div className="flex items-center gap-2 flex-wrap">
                   {packs.map((p) => (
@@ -847,8 +856,10 @@ export default function App() {
           <div className="flex-1 min-w-[280px]">
             <PackSettings
               packName={packName}
+              packDescription={packDescription}
               packIcon={packIcon}
               onNameChange={setPackName}
+              onDescriptionChange={setPackDescription}
               onIconChange={setPackIcon}
             />
           </div>

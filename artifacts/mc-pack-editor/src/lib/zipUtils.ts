@@ -124,6 +124,7 @@ export async function exportMergedPack(
   folderSources: Record<string, string>,
   textureOverrides: Record<string, string>,
   packName: string,
+  packDescription: string,
   packIcon: string | null
 ): Promise<Blob> {
   const zip = new JSZip();
@@ -135,7 +136,7 @@ export async function exportMergedPack(
   }
 
   // Write pack.mcmeta
-  const mcmeta = JSON.stringify({ pack: { pack_format: 1, description: packName } }, null, 2);
+  const mcmeta = JSON.stringify({ pack: { pack_format: 1, description: packDescription } }, null, 2);
   zip.file("pack.mcmeta", mcmeta);
 
   // Write pack icon
