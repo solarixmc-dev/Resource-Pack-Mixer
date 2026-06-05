@@ -364,6 +364,82 @@ function DropZone({ onLoad }: { onLoad: (packs: Pack[]) => void }) {
   );
 }
 
+// ─── Minecraft text renderer ───────────────────────────────────────────────────
+
+const MC_COLOR_MAP: Record<string, string> = {
+  "0": "#000000", "1": "#0000AA", "2": "#00AA00", "3": "#00AAAA",
+  "4": "#AA0000", "5": "#AA00AA", "6": "#FFAA00", "7": "#AAAAAA",
+  "8": "#555555", "9": "#5555FF", "a": "#55FF55", "b": "#55FFFF",
+  "c": "#FF5555", "d": "#FF55FF", "e": "#FFFF55", "f": "#FFFFFF",
+};
+
+interface McSegment {
+  text: string;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+}
+
+function parseMcText(raw: string): McSegment[] {
+  const segments: McSegment[] = [];
+  let color: string | undefined;
+  let bold = false, italic = false, underline = false, strikethrough = false;
+
+  // Split on § codes; keep delimiters
+  const parts = raw.split(/(§[0-9a-fklmnorA-FKLMNOR])/);
+  for (const part of parts) {
+    if (part.startsWith("§") && part.length === 2) {
+      const ch = part[1].toLowerCase();
+      if (MC_COLOR_MAP[ch]) {
+        color = MC_COLOR_MAP[ch];
+        bold = italic = underline = strikethrough = false;
+      } else if (ch === "l") { bold = true; }
+      else if (ch === "o") { italic = true; }
+      else if (ch === "n") { underline = true; }
+      else if (ch === "m") { strikethrough = true; }
+      else if (ch === "r") {
+        color = undefined;
+        bold = italic = underline = strikethrough = false;
+      }
+      // §k (obfuscated) intentionally ignored
+    } else if (part) {
+      segments.push({ text: part, color, bold, italic, underline, strikethrough });
+    }
+  }
+  return segments;
+}
+
+function McText({ text, fallback = "—" }: { text: string; fallback?: string }) {
+  const segments = parseMcText(text);
+  if (!segments.length) {
+    return <span className="text-muted-foreground italic text-xs">{fallback}</span>;
+  }
+  return (
+    <>
+      {segments.map((seg, i) => {
+        const dec = [seg.underline && "underline", seg.strikethrough && "line-through"]
+          .filter(Boolean).join(" ");
+        return (
+          <span
+            key={i}
+            style={{
+              color: seg.color ?? "#FFFFFF",
+              fontWeight: seg.bold ? "bold" : undefined,
+              fontStyle: seg.italic ? "italic" : undefined,
+              textDecoration: dec || undefined,
+              textShadow: seg.color ? `1px 1px 2px rgba(0,0,0,0.8)` : undefined,
+            }}
+          >
+            {seg.text}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 // ─── Minecraft format codes ────────────────────────────────────────────────────
 
 const MC_COLORS = [
@@ -465,9 +541,14 @@ function PackSettings({
             value={packName}
             onFocus={() => setActiveField("name")}
             onChange={(e) => onNameChange(e.target.value)}
-            className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
+            className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono"
             placeholder="My Resource Pack"
           />
+          {packName.includes("§") && (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-black rounded border border-border/50 text-sm min-h-[26px]">
+              <McText text={packName} fallback="…" />
+            </div>
+          )}
         </div>
 
         {/* Description */}
@@ -481,9 +562,14 @@ function PackSettings({
             value={packDescription}
             onFocus={() => setActiveField("desc")}
             onChange={(e) => onDescriptionChange(e.target.value)}
-            className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
+            className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono"
             placeholder="A Minecraft resource pack"
           />
+          {packDescription.includes("§") && (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-black rounded border border-border/50 text-sm min-h-[26px]">
+              <McText text={packDescription} fallback="…" />
+            </div>
+          )}
         </div>
 
         {/* Format code toolbar */}
@@ -812,7 +898,8 @@ export default function App() {
     setPacks((prev) => {
       const existing = new Set(prev.map((p) => p.name));
       const deduped = newPacks.filter((p) => !existing.has(p.name));
-      return [...prev, ...deduped];
+      // Newest uploads go to the front (highest priority), like in-game behavior
+      return [...deduped, ...prev];
     });
   }, []);
 
