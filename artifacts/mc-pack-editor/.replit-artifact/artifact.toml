@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "MC Resource Pack Editor"
+version = "1.0.0"
+id = "artifacts/mc-pack-editor"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21218
+
+[services.development]
+run = "pnpm --filter @workspace/mc-pack-editor run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/mc-pack-editor", "run", "build" ]
+publicDir = "artifacts/mc-pack-editor/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21218"
+BASE_PATH = "/"
