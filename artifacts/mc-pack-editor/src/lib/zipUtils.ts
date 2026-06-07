@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { Pack, TextureEntry, PACK_COLORS } from "../types";
+import { AtlasRegion, getAtlasDefinition } from "./atlasRegions";
 
 let packColorIndex = 0;
 
@@ -119,10 +120,42 @@ export function isImagePath(path: string): boolean {
   return /\.(png|jpg|jpeg|gif)$/i.test(path);
 }
 
+/** Compose an atlas PNG by drawing region patches from other packs on top of a base atlas. */
+export async function composeAtlas(
+  baseBuffer: ArrayBuffer,
+  patches: { region: AtlasRegion; buffer: ArrayBuffer }[]
+): Promise<ArrayBuffer> {
+  const baseBlob = new Blob([baseBuffer], { type: "image/png" });
+  const baseBitmap = await createImageBitmap(baseBlob);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = baseBitmap.width;
+  canvas.height = baseBitmap.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(baseBitmap, 0, 0);
+  baseBitmap.close();
+
+  for (const { region, buffer } of patches) {
+    const patchBlob = new Blob([buffer], { type: "image/png" });
+    const patchBitmap = await createImageBitmap(patchBlob);
+    ctx.drawImage(
+      patchBitmap,
+      region.x, region.y, region.w, region.h,
+      region.x, region.y, region.w, region.h
+    );
+    patchBitmap.close();
+  }
+
+  return new Promise<ArrayBuffer>((resolve) => {
+    canvas.toBlob((blob) => blob!.arrayBuffer().then(resolve), "image/png");
+  });
+}
+
 export async function exportMergedPack(
   packs: Pack[],
   folderSources: Record<string, string>,
   textureOverrides: Record<string, string>,
+  atlasRegionOverrides: Record<string, Record<string, string>>,
   packName: string,
   packDescription: string,
   packIcon: string | null
@@ -182,6 +215,28 @@ export async function exportMergedPack(
 
     if (sourcePack) {
       const buf = sourcePack.files.get(path)!;
+
+      // If this is a known atlas with region-level overrides, compose it
+      const atlasDef = getAtlasDefinition(path);
+      const regionOverrides = atlasRegionOverrides[path];
+      if (atlasDef && regionOverrides && Object.keys(regionOverrides).length > 0) {
+        const patches: { region: AtlasRegion; buffer: ArrayBuffer }[] = [];
+        // Apply regions in definition order (larger → smaller, so smaller wins)
+        for (const region of atlasDef.regions) {
+          const overridePackId = regionOverrides[region.id];
+          if (!overridePackId) continue;
+          const overridePack = packs.find((p) => p.id === overridePackId && p.files.has(path));
+          if (overridePack) {
+            patches.push({ region, buffer: overridePack.files.get(path)! });
+          }
+        }
+        if (patches.length > 0) {
+          const composed = await composeAtlas(buf, patches);
+          zip.file(path, composed);
+          continue;
+        }
+      }
+
       zip.file(path, buf);
     }
   }

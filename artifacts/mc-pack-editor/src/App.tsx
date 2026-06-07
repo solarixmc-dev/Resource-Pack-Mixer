@@ -9,7 +9,9 @@ import {
   arrayBufferToDataURL,
   isImagePath,
   exportMergedPack,
+  composeAtlas,
 } from "./lib/zipUtils";
+import { getAtlasDefinition, AtlasDefinition } from "./lib/atlasRegions";
 
 // ─── Small UI atoms ────────────────────────────────────────────────────────────
 
@@ -651,7 +653,6 @@ function FolderSidebar({
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left"
           onClick={() => onSelect(key)}
         >
-          <span>{icon}</span>
           <span className={`flex-1 font-medium leading-snug ${active ? "text-primary" : "text-foreground"}`}>
             {label}
           </span>
@@ -700,6 +701,7 @@ function TextureCard({
   textureOverrides,
   folder,
   onOverride,
+  onOpenLightbox,
 }: {
   texturePath: string;
   displayName: string;
@@ -708,6 +710,7 @@ function TextureCard({
   textureOverrides: TextureOverrides;
   folder: string;
   onOverride: (path: string, packId: string | null) => void;
+  onOpenLightbox?: () => void;
 }) {
   const overridePackId = textureOverrides[texturePath];
   const folderPackId = folderSources[folder];
@@ -717,6 +720,7 @@ function TextureCard({
   if (!packsWithFile.length) return null;
 
   const isImg = isImagePath(texturePath);
+  const isAtlas = !!getAtlasDefinition(texturePath);
 
   return (
     <div className="bg-card border border-card-border rounded-lg overflow-hidden flex flex-col group hover:border-primary/40 transition-colors">
@@ -734,8 +738,8 @@ function TextureCard({
             return (
               <button
                 key={pack.id}
-                className={`flex-1 flex items-center justify-center p-2 checkered min-h-[64px] relative transition-all ${
-                  packsWithFile.length > 1 ? "cursor-pointer hover:brightness-110" : ""
+                className={`flex-1 flex items-center justify-center p-2 checkered min-h-[80px] relative transition-all ${
+                  packsWithFile.length > 1 ? "cursor-pointer hover:brightness-110" : "cursor-default"
                 } ${isSelected && packsWithFile.length > 1 ? "ring-2 ring-inset ring-primary" : ""}`}
                 onClick={() => {
                   if (packsWithFile.length <= 1) return;
@@ -750,7 +754,7 @@ function TextureCard({
                 <img
                   src={url}
                   alt={displayName}
-                  className="texture-preview max-w-[56px] max-h-[56px] object-contain"
+                  className="texture-preview max-w-[72px] max-h-[72px] object-contain"
                 />
                 {packsWithFile.length > 1 && (
                   <span
@@ -764,23 +768,31 @@ function TextureCard({
         </div>
       )}
 
-      {/* File label & controls */}
-      <div className="px-2 py-1.5 flex items-center gap-1 min-w-0">
+      {/* File label & controls — click label to open lightbox */}
+      <button
+        className="px-2 py-1.5 flex items-center gap-1 min-w-0 w-full text-left hover:bg-accent/40 transition-colors"
+        onClick={() => onOpenLightbox?.()}
+        title="Click to view larger"
+      >
+        {isAtlas && (
+          <span className="text-[10px] text-primary font-bold flex-shrink-0" title="Atlas texture — region editor available">ATL</span>
+        )}
         <span className="text-xs text-muted-foreground truncate flex-1" title={displayName}>
           {displayName}
         </span>
         {overridePackId && (
-          <button
-            className="text-xs text-primary hover:text-foreground flex-shrink-0"
-            onClick={() => onOverride(texturePath, null)}
+          <span
+            className="text-xs text-primary flex-shrink-0"
+            onClick={(e) => { e.stopPropagation(); onOverride(texturePath, null); }}
             title="Clear override"
           >
             ✕
-          </button>
+          </span>
         )}
-      </div>
+        <span className="text-[10px] text-muted-foreground/50 flex-shrink-0">⊞</span>
+      </button>
 
-      {/* Pack selector (shown on hover when multiple packs) */}
+      {/* Pack selector (when multiple packs) */}
       {packsWithFile.length > 1 && (
         <div className="px-2 pb-2 flex gap-1 flex-wrap">
           <button
@@ -814,12 +826,14 @@ function TextureGrid({
   folderSources,
   textureOverrides,
   onOverride,
+  onOpenLightbox,
 }: {
   packs: Pack[];
   folder: string;
   folderSources: FolderSources;
   textureOverrides: TextureOverrides;
   onOverride: (path: string, packId: string | null) => void;
+  onOpenLightbox: (path: string, displayName: string, folder: string) => void;
 }) {
   const [search, setSearch] = useState("");
 
@@ -837,7 +851,6 @@ function TextureGrid({
   if (!paths.length) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
-        <span className="text-4xl">📭</span>
         <p className="text-sm">No files in this folder across uploaded packs</p>
       </div>
     );
@@ -848,7 +861,7 @@ function TextureGrid({
       <div className="flex items-center gap-3">
         <input
           type="search"
-          placeholder="Search textures…"
+          placeholder="Search in folder…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="bg-secondary border border-border rounded px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 flex-1"
@@ -858,9 +871,7 @@ function TextureGrid({
         </span>
       </div>
 
-      <div className="grid gap-2 overflow-y-auto"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}
-      >
+      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
         {filtered.map((path) => {
           const parts = path.split("/");
           const displayName = parts[parts.length - 1];
@@ -874,6 +885,7 @@ function TextureGrid({
               textureOverrides={textureOverrides}
               folder={folder}
               onOverride={onOverride}
+              onOpenLightbox={() => onOpenLightbox(path, displayName, folder)}
             />
           );
         })}
@@ -890,12 +902,14 @@ function SearchAllResults({
   folderSources,
   textureOverrides,
   onOverride,
+  onOpenLightbox,
 }: {
   query: string;
   packs: Pack[];
   folderSources: FolderSources;
   textureOverrides: TextureOverrides;
   onOverride: (path: string, packId: string | null) => void;
+  onOpenLightbox: (path: string, displayName: string, folder: string) => void;
 }) {
   const allPaths = useMemo(() => {
     const set = new Set<string>();
@@ -926,10 +940,7 @@ function SearchAllResults({
       <p className="text-xs text-muted-foreground">
         {filtered.length} result{filtered.length !== 1 ? "s" : ""} across all folders
       </p>
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}
-      >
+      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
         {filtered.map((path) => {
           const parts = path.split("/");
           const displayName = parts[parts.length - 1];
@@ -944,11 +955,183 @@ function SearchAllResults({
                 textureOverrides={textureOverrides}
                 folder={folder}
                 onOverride={onOverride}
+                onOpenLightbox={() => onOpenLightbox(path, displayName, folder)}
               />
               <span className="text-[10px] text-muted-foreground text-center truncate px-1">{folder}</span>
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Texture Lightbox ──────────────────────────────────────────────────────────
+
+function TextureLightbox({
+  texturePath,
+  displayName,
+  folder,
+  packs,
+  folderSources,
+  textureOverrides,
+  atlasRegionOverrides,
+  onOverride,
+  onAtlasRegionOverride,
+  onClose,
+}: {
+  texturePath: string;
+  displayName: string;
+  folder: string;
+  packs: Pack[];
+  folderSources: FolderSources;
+  textureOverrides: TextureOverrides;
+  atlasRegionOverrides: Record<string, Record<string, string>>;
+  onOverride: (path: string, packId: string | null) => void;
+  onAtlasRegionOverride: (atlasPath: string, regionId: string, packId: string | null) => void;
+  onClose: () => void;
+}) {
+  const packsWithFile = packs.filter((p) => p.files.has(texturePath));
+  const overridePackId = textureOverrides[texturePath];
+  const folderPackId = folderSources[folder];
+  const effectivePackId = overridePackId ?? folderPackId;
+  const atlasDef = getAtlasDefinition(texturePath);
+  const regionOverrides = atlasRegionOverrides[texturePath] ?? {};
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-card border border-border rounded-xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-shrink-0">
+          <span className="font-semibold text-sm">{displayName}</span>
+          <span className="text-xs text-muted-foreground">{texturePath}</span>
+          {atlasDef && (
+            <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded font-medium">Atlas</span>
+          )}
+          <button
+            className="ml-auto text-muted-foreground hover:text-foreground text-lg leading-none"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {/* Image previews */}
+          <div className={`flex gap-3 flex-wrap ${packsWithFile.length === 1 ? "justify-center" : ""}`}>
+            {packsWithFile.map((pack) => {
+              const buf = pack.files.get(texturePath)!;
+              const url = arrayBufferToDataURL(buf, texturePath);
+              const isSelected = effectivePackId === pack.id || (!effectivePackId && pack === packsWithFile[0]);
+              return (
+                <div key={pack.id} className="flex flex-col items-center gap-2">
+                  <button
+                    className={`checkered rounded-lg p-3 border-2 transition-all ${isSelected ? "border-primary" : "border-transparent hover:border-border"} ${packsWithFile.length > 1 ? "cursor-pointer" : "cursor-default"}`}
+                    onClick={() => {
+                      if (packsWithFile.length <= 1) return;
+                      onOverride(texturePath, overridePackId === pack.id ? null : pack.id);
+                    }}
+                    title={pack.name}
+                  >
+                    <img
+                      src={url}
+                      alt={pack.name}
+                      className="texture-preview"
+                      style={{ width: 160, height: 160, objectFit: "contain", imageRendering: "pixelated" }}
+                    />
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: pack.color }} />
+                    <span className="text-xs text-muted-foreground">{pack.name}</span>
+                    {isSelected && <span className="text-xs text-primary font-bold">✓</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Atlas region editor */}
+          {atlasDef && packsWithFile.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-secondary/50 border-b border-border">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {atlasDef.label} — Region Overrides
+                </span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Pick a different pack for each region. On export, regions are composited onto the base atlas.
+                </p>
+              </div>
+              <div className="divide-y divide-border">
+                {atlasDef.regions.map((region) => {
+                  const regionPackId = regionOverrides[region.id];
+                  return (
+                    <div key={region.id} className="flex items-center gap-3 px-3 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium">{region.label}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {region.description} · ({region.x},{region.y}) {region.w}×{region.h}px
+                        </div>
+                      </div>
+                      <div className="flex gap-1 flex-wrap justify-end">
+                        <button
+                          className={`text-xs px-2 py-0.5 rounded transition-colors ${!regionPackId ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-accent"}`}
+                          onClick={() => onAtlasRegionOverride(texturePath, region.id, null)}
+                        >
+                          auto
+                        </button>
+                        {packsWithFile.map((p) => (
+                          <button
+                            key={p.id}
+                            className={`text-xs px-2 py-0.5 rounded transition-colors max-w-[80px] truncate ${regionPackId === p.id ? "font-semibold" : "text-muted-foreground hover:bg-accent"}`}
+                            style={regionPackId === p.id ? { background: p.color + "33", color: p.color } : {}}
+                            onClick={() => onAtlasRegionOverride(texturePath, region.id, regionPackId === p.id ? null : p.id)}
+                            title={p.name}
+                          >
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Whole-file pack selector for non-atlas or as fallback */}
+          {packsWithFile.length > 1 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground">Whole file:</span>
+              <button
+                className={`text-xs px-2 py-0.5 rounded transition-colors ${!overridePackId ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-accent"}`}
+                onClick={() => onOverride(texturePath, null)}
+              >
+                auto
+              </button>
+              {packsWithFile.map((p) => (
+                <button
+                  key={p.id}
+                  className={`text-xs px-2 py-0.5 rounded transition-colors max-w-[80px] truncate ${overridePackId === p.id ? "font-semibold" : "text-muted-foreground hover:bg-accent"}`}
+                  style={overridePackId === p.id ? { background: p.color + "33", color: p.color } : {}}
+                  onClick={() => onOverride(texturePath, overridePackId === p.id ? null : p.id)}
+                  title={p.name}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -961,12 +1144,14 @@ export default function App() {
   const [selectedFolder, setSelectedFolder] = useState("blocks");
   const [folderSources, setFolderSources] = useState<FolderSources>({});
   const [textureOverrides, setTextureOverrides] = useState<TextureOverrides>({});
+  const [atlasRegionOverrides, setAtlasRegionOverrides] = useState<Record<string, Record<string, string>>>({});
   const [packName, setPackName] = useState("My Resource Pack");
   const [packDescription, setPackDescription] = useState("A Minecraft 1.8 Resource Pack");
   const [packIcon, setPackIcon] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [lightbox, setLightbox] = useState<{ path: string; displayName: string; folder: string } | null>(null);
 
   const handlePacksLoaded = useCallback((newPacks: Pack[]) => {
     setPacks((prev) => {
@@ -979,7 +1164,6 @@ export default function App() {
 
   const removePack = useCallback((id: string) => {
     setPacks((prev) => prev.filter((p) => p.id !== id));
-    // Clean up overrides referencing this pack
     setFolderSources((prev) => {
       const next = { ...prev };
       Object.keys(next).forEach((k) => { if (next[k] === id) delete next[k]; });
@@ -988,6 +1172,27 @@ export default function App() {
     setTextureOverrides((prev) => {
       const next = { ...prev };
       Object.keys(next).forEach((k) => { if (next[k] === id) delete next[k]; });
+      return next;
+    });
+    setAtlasRegionOverrides((prev) => {
+      const next: typeof prev = {};
+      for (const [path, regions] of Object.entries(prev)) {
+        const filtered: Record<string, string> = {};
+        for (const [regionId, packId] of Object.entries(regions)) {
+          if (packId !== id) filtered[regionId] = packId;
+        }
+        if (Object.keys(filtered).length > 0) next[path] = filtered;
+      }
+      return next;
+    });
+  }, []);
+
+  const handleAtlasRegionOverride = useCallback((atlasPath: string, regionId: string, packId: string | null) => {
+    setAtlasRegionOverrides((prev) => {
+      const next = { ...prev, [atlasPath]: { ...prev[atlasPath] } };
+      if (packId === null) delete next[atlasPath][regionId];
+      else next[atlasPath][regionId] = packId;
+      if (Object.keys(next[atlasPath]).length === 0) delete next[atlasPath];
       return next;
     });
   }, []);
@@ -1018,6 +1223,7 @@ export default function App() {
         packs,
         folderSources,
         textureOverrides,
+        atlasRegionOverrides,
         packName,
         packDescription,
         packIcon
@@ -1038,7 +1244,7 @@ export default function App() {
     } finally {
       setExporting(false);
     }
-  }, [packs, folderSources, textureOverrides, packName, packIcon]);
+  }, [packs, folderSources, textureOverrides, atlasRegionOverrides, packName, packDescription, packIcon]);
 
   const reorderPacks = useCallback((newOrder: Pack[]) => {
     setPacks(newOrder);
@@ -1162,19 +1368,12 @@ export default function App() {
             {/* Folder header + global search */}
             <div className="flex-shrink-0 px-4 py-2 border-b border-border flex items-center gap-3">
               {globalSearch ? (
-                <>
-                  <span className="text-lg">🔍</span>
-                  <span className="font-semibold">Search results</span>
-                </>
-              ) : (() => {
-                const meta = MC_FOLDERS.find((f) => f.key === selectedFolder);
-                return (
-                  <>
-                    <span className="text-lg">{meta?.icon ?? "📁"}</span>
-                    <span className="font-semibold">{meta?.label ?? selectedFolder}</span>
-                  </>
-                );
-              })()}
+                <span className="font-semibold">Search results</span>
+              ) : (
+                <span className="font-semibold">
+                  {MC_FOLDERS.find((f) => f.key === selectedFolder)?.label ?? selectedFolder}
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-2">
                 <input
                   type="search"
@@ -1200,6 +1399,7 @@ export default function App() {
                   folderSources={folderSources}
                   textureOverrides={textureOverrides}
                   onOverride={handleOverride}
+                  onOpenLightbox={(path, displayName, folder) => setLightbox({ path, displayName, folder })}
                 />
               ) : (
                 <TextureGrid
@@ -1208,11 +1408,28 @@ export default function App() {
                   folderSources={folderSources}
                   textureOverrides={textureOverrides}
                   onOverride={handleOverride}
+                  onOpenLightbox={(path, displayName, folder) => setLightbox({ path, displayName, folder })}
                 />
               )}
             </div>
           </main>
         </div>
+      )}
+
+      {/* ── Lightbox modal ── */}
+      {lightbox && (
+        <TextureLightbox
+          texturePath={lightbox.path}
+          displayName={lightbox.displayName}
+          folder={lightbox.folder}
+          packs={packs}
+          folderSources={folderSources}
+          textureOverrides={textureOverrides}
+          atlasRegionOverrides={atlasRegionOverrides}
+          onOverride={handleOverride}
+          onAtlasRegionOverride={handleAtlasRegionOverride}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   );
