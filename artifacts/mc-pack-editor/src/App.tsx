@@ -159,10 +159,14 @@ function PackOrderPanel({
   packs,
   onReorder,
   onRemove,
+  packVisibility,
+  onVisibilityToggle,
 }: {
   packs: Pack[];
   onReorder: (newOrder: Pack[]) => void;
   onRemove: (id: string) => void;
+  packVisibility: Record<string, boolean>;
+  onVisibilityToggle: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -288,6 +292,15 @@ function PackOrderPanel({
                   <span className="text-xs text-muted-foreground flex-shrink-0">
                     {pack.files.size.toLocaleString()} files
                   </span>
+
+                  {/* Visibility toggle */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onVisibilityToggle(pack.id); }}
+                    className={`text-base flex-shrink-0 transition-all leading-none ${packVisibility[pack.id] === false ? "opacity-25 grayscale" : "opacity-70 hover:opacity-100"}`}
+                    title={packVisibility[pack.id] === false ? "Hidden from comparison — click to show" : "Visible in comparison — click to hide"}
+                  >
+                    👁
+                  </button>
 
                   {/* Remove */}
                   <button
@@ -827,6 +840,7 @@ function TextureGrid({
   textureOverrides,
   onOverride,
   onOpenLightbox,
+  cols,
 }: {
   packs: Pack[];
   folder: string;
@@ -834,6 +848,7 @@ function TextureGrid({
   textureOverrides: TextureOverrides;
   onOverride: (path: string, packId: string | null) => void;
   onOpenLightbox: (path: string, displayName: string, folder: string) => void;
+  cols: number;
 }) {
   const [search, setSearch] = useState("");
 
@@ -871,7 +886,7 @@ function TextureGrid({
         </span>
       </div>
 
-      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
         {filtered.map((path) => {
           const parts = path.split("/");
           const displayName = parts[parts.length - 1];
@@ -903,6 +918,7 @@ function SearchAllResults({
   textureOverrides,
   onOverride,
   onOpenLightbox,
+  cols,
 }: {
   query: string;
   packs: Pack[];
@@ -910,6 +926,7 @@ function SearchAllResults({
   textureOverrides: TextureOverrides;
   onOverride: (path: string, packId: string | null) => void;
   onOpenLightbox: (path: string, displayName: string, folder: string) => void;
+  cols: number;
 }) {
   const allPaths = useMemo(() => {
     const set = new Set<string>();
@@ -940,7 +957,7 @@ function SearchAllResults({
       <p className="text-xs text-muted-foreground">
         {filtered.length} result{filtered.length !== 1 ? "s" : ""} across all folders
       </p>
-      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
         {filtered.map((path) => {
           const parts = path.split("/");
           const displayName = parts[parts.length - 1];
@@ -1074,8 +1091,13 @@ function TextureLightbox({
               <div className="divide-y divide-border">
                 {atlasDef.regions.map((region) => {
                   const regionPackId = regionOverrides[region.id];
+                  const regionOverridePack = packsWithFile.find(p => p.id === regionPackId);
                   return (
-                    <div key={region.id} className="flex items-center gap-3 px-3 py-2.5">
+                    <div
+                      key={region.id}
+                      className="flex items-center gap-3 px-3 py-2.5 border-l-4 transition-colors"
+                      style={{ borderLeftColor: regionOverridePack ? regionOverridePack.color : "transparent" }}
+                    >
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium">{region.label}</div>
                         <div className="text-xs text-muted-foreground">
@@ -1137,6 +1159,296 @@ function TextureLightbox({
   );
 }
 
+// ─── Image Cropper ─────────────────────────────────────────────────────────────
+
+const CROP_DISPLAY = 300;
+
+function ImageCropper({
+  src,
+  onCrop,
+  onCancel,
+}: {
+  src: string;
+  onCrop: (dataUrl: string) => void;
+  onCancel: () => void;
+}) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [crop, setCrop] = useState({ x: 25, y: 25, size: 250 });
+  const [dragging, setDragging] = useState<"move" | "resize" | null>(null);
+  const [origin, setOrigin] = useState({ mx: 0, my: 0, cx: 0, cy: 0, cs: 0 });
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onCancel]);
+
+  const clampCrop = (c: { x: number; y: number; size: number }) => {
+    const size = Math.max(20, Math.min(CROP_DISPLAY, c.size));
+    const x = Math.max(0, Math.min(CROP_DISPLAY - size, c.x));
+    const y = Math.max(0, Math.min(CROP_DISPLAY - size, c.y));
+    return { x, y, size };
+  };
+
+  const startMove = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging("move");
+    setOrigin({ mx: e.clientX, my: e.clientY, cx: crop.x, cy: crop.y, cs: crop.size });
+  };
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging("resize");
+    setOrigin({ mx: e.clientX, my: e.clientY, cx: crop.x, cy: crop.y, cs: crop.size });
+  };
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragging) return;
+    const dx = e.clientX - origin.mx;
+    const dy = e.clientY - origin.my;
+    if (dragging === "move") {
+      setCrop(clampCrop({ x: origin.cx + dx, y: origin.cy + dy, size: origin.cs }));
+    } else {
+      const delta = Math.max(dx, dy);
+      setCrop(clampCrop({ x: origin.cx, y: origin.cy, size: origin.cs + delta }));
+    }
+  };
+
+  const handleApply = () => {
+    const img = imgRef.current;
+    if (!img) return;
+    const scaleX = img.naturalWidth / CROP_DISPLAY;
+    const scaleY = img.naturalHeight / CROP_DISPLAY;
+    const canvas = document.createElement("canvas");
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, crop.x * scaleX, crop.y * scaleY, crop.size * scaleX, crop.size * scaleY, 0, 0, 128, 128);
+    onCrop(canvas.toDataURL("image/png"));
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onMouseMove={onMouseMove}
+      onMouseUp={() => setDragging(null)}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div
+        className="bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-shrink-0">
+          <span className="font-semibold text-sm">Crop Icon</span>
+          <span className="text-xs text-muted-foreground">Drag box to move · corner handle to resize</span>
+          <button onClick={onCancel} className="ml-auto text-muted-foreground hover:text-foreground text-lg leading-none">✕</button>
+        </div>
+
+        <div className="p-4">
+          <div
+            className="relative overflow-hidden rounded border border-border select-none"
+            style={{ width: CROP_DISPLAY, height: CROP_DISPLAY, cursor: dragging === "move" ? "grabbing" : "default" }}
+          >
+            <img
+              ref={imgRef}
+              src={src}
+              draggable={false}
+              style={{ width: CROP_DISPLAY, height: CROP_DISPLAY, objectFit: "fill", display: "block", userSelect: "none" }}
+            />
+            {/* Crop box */}
+            <div
+              className="absolute border-2 border-white cursor-grab active:cursor-grabbing"
+              style={{
+                left: crop.x, top: crop.y, width: crop.size, height: crop.size,
+                boxShadow: "0 0 0 2000px rgba(0,0,0,0.55)",
+              }}
+              onMouseDown={startMove}
+            >
+              {/* Corner markers */}
+              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-white pointer-events-none" />
+              <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-white pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-white pointer-events-none" />
+              {/* Resize handle (bottom-right) */}
+              <div
+                className="absolute bottom-0 right-0 w-5 h-5 bg-white cursor-se-resize flex items-center justify-center"
+                style={{ borderRadius: "3px 0 0 0" }}
+                onMouseDown={startResize}
+              >
+                <span className="text-[8px] text-black font-bold leading-none select-none">↘</span>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2 text-center">Output will be cropped to a square (128 × 128 px)</p>
+        </div>
+
+        <div className="px-4 pb-4 flex items-center justify-end gap-2">
+          <Btn variant="default" onClick={onCancel}>Cancel</Btn>
+          <Btn variant="primary" onClick={handleApply}>Apply Crop</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Modal ─────────────────────────────────────────────────────────────
+
+function SettingsModal({
+  texturesPerRow,
+  onTexturesPerRowChange,
+  darkMode,
+  onDarkModeChange,
+  packName,
+  packDescription,
+  packIcon,
+  onNameChange,
+  onDescriptionChange,
+  onIconFilePicked,
+  onIconRemove,
+  onClose,
+}: {
+  texturesPerRow: number;
+  onTexturesPerRowChange: (n: number) => void;
+  darkMode: boolean;
+  onDarkModeChange: (v: boolean) => void;
+  packName: string;
+  packDescription: string;
+  packIcon: string | null;
+  onNameChange: (v: string) => void;
+  onDescriptionChange: (v: string) => void;
+  onIconFilePicked: (dataUrl: string) => void;
+  onIconRemove: () => void;
+  onClose: () => void;
+}) {
+  const iconInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+
+  const handleIconFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => onIconFilePicked(reader.result as string);
+    reader.readAsDataURL(f);
+    e.target.value = "";
+  };
+
+  const clampCols = (n: number) => Math.max(1, Math.min(12, n));
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute top-14 left-4 w-76 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ width: 288 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <span className="font-semibold text-sm">Settings</span>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">✕</button>
+        </div>
+
+        {/* Display */}
+        <div className="px-4 py-3 flex flex-col gap-3 border-b border-border">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Display</span>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm flex-1">Textures per row</span>
+            <button
+              onClick={() => onTexturesPerRowChange(clampCols(texturesPerRow - 1))}
+              className="w-7 h-7 rounded bg-secondary hover:bg-accent border border-border text-sm font-bold flex items-center justify-center transition-colors"
+            >−</button>
+            <input
+              type="number"
+              value={texturesPerRow}
+              onChange={(e) => onTexturesPerRowChange(clampCols(parseInt(e.target.value) || 6))}
+              className="w-10 text-center bg-secondary border border-border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+              min={1} max={12}
+            />
+            <button
+              onClick={() => onTexturesPerRowChange(clampCols(texturesPerRow + 1))}
+              className="w-7 h-7 rounded bg-secondary hover:bg-accent border border-border text-sm font-bold flex items-center justify-center transition-colors"
+            >+</button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm flex-1">{darkMode ? "Dark mode" : "Light mode"}</span>
+            <button
+              onClick={() => onDarkModeChange(!darkMode)}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${darkMode ? "bg-primary" : "bg-secondary border border-border"}`}
+            >
+              <span
+                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${darkMode ? "right-0.5" : "left-0.5"}`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Pack defaults */}
+        <div className="px-4 py-3 flex flex-col gap-3">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Output Pack</span>
+
+          {/* Icon */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-shrink-0">
+              <button
+                className="w-14 h-14 rounded border border-border overflow-hidden checkered hover:border-primary transition-colors cursor-pointer"
+                onClick={() => iconInputRef.current?.click()}
+                title="Click to set pack icon"
+              >
+                {packIcon ? (
+                  <img src={packIcon} className="w-full h-full object-cover texture-preview" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-2xl">📦</div>
+                )}
+              </button>
+              {packIcon && (
+                <button
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center hover:opacity-90"
+                  onClick={onIconRemove}
+                  title="Remove icon"
+                >✕</button>
+              )}
+            </div>
+            <input ref={iconInputRef} type="file" accept="image/*" className="hidden" onChange={handleIconFile} />
+            <div className="flex-1 text-xs text-muted-foreground">
+              {packIcon ? "Click icon to replace" : "Click icon to upload"}
+              <br />Will be saved as pack.png
+            </div>
+          </div>
+
+          {/* Name */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Pack name</label>
+            <input
+              type="text"
+              value={packName}
+              onChange={(e) => onNameChange(e.target.value)}
+              className="bg-secondary border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+              placeholder="My Resource Pack"
+            />
+          </div>
+
+          {/* Description */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Description (pack.mcmeta)</label>
+            <input
+              type="text"
+              value={packDescription}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              className="bg-secondary border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+              placeholder="A Minecraft resource pack"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1152,6 +1464,14 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [globalSearch, setGlobalSearch] = useState("");
   const [lightbox, setLightbox] = useState<{ path: string; displayName: string; folder: string } | null>(null);
+  // Settings
+  const [texturesPerRow, setTexturesPerRow] = useState(6);
+  const [darkMode, setDarkMode] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Pack visibility: missing key = visible
+  const [packVisibility, setPackVisibility] = useState<Record<string, boolean>>({});
+  // Icon cropping
+  const [cropSource, setCropSource] = useState<string | null>(null);
 
   const handlePacksLoaded = useCallback((newPacks: Pack[]) => {
     setPacks((prev) => {
@@ -1254,15 +1574,32 @@ export default function App() {
     setPacks((prev) => prev.map((p) => (p.id === id ? { ...p, color } : p)));
   }, []);
 
+  const handleVisibilityToggle = useCallback((id: string) => {
+    setPackVisibility((prev) => ({ ...prev, [id]: prev[id] === false ? true : false }));
+  }, []);
+
+  const visiblePacks = useMemo(
+    () => packs.filter((p) => packVisibility[p.id] !== false),
+    [packs, packVisibility]
+  );
+
   const overrideCount = Object.keys(textureOverrides).length;
   const folderSourceCount = Object.values(folderSources).filter(Boolean).length;
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
+    <div className={`flex flex-col h-screen bg-background text-foreground overflow-hidden${darkMode ? " dark" : ""}`}>
       {/* ── Header ── */}
       <header className="flex-shrink-0 border-b border-border bg-card px-4 py-3">
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Settings gear */}
+            <button
+              onClick={() => setSettingsOpen((v) => !v)}
+              className={`w-7 h-7 rounded flex items-center justify-center text-base transition-colors ${settingsOpen ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+              title="Settings"
+            >
+              ⚙
+            </button>
             <h1 className="text-base font-bold text-foreground">MC Resource Pack Editor</h1>
             <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">1.8</span>
           </div>
@@ -1276,6 +1613,8 @@ export default function App() {
                   packs={packs}
                   onReorder={reorderPacks}
                   onRemove={removePack}
+                  packVisibility={packVisibility}
+                  onVisibilityToggle={handleVisibilityToggle}
                 />
                 <div className="flex items-center gap-2 flex-wrap">
                   {packs.map((p) => (
@@ -1311,7 +1650,7 @@ export default function App() {
               packIcon={packIcon}
               onNameChange={setPackName}
               onDescriptionChange={setPackDescription}
-              onIconChange={setPackIcon}
+              onIconChange={(d) => { if (d === null) setPackIcon(null); else setCropSource(d); }}
             />
           </div>
           <div className="flex-shrink-0 w-64">
@@ -1395,20 +1734,22 @@ export default function App() {
               {globalSearch ? (
                 <SearchAllResults
                   query={globalSearch}
-                  packs={packs}
+                  packs={visiblePacks}
                   folderSources={folderSources}
                   textureOverrides={textureOverrides}
                   onOverride={handleOverride}
                   onOpenLightbox={(path, displayName, folder) => setLightbox({ path, displayName, folder })}
+                  cols={texturesPerRow}
                 />
               ) : (
                 <TextureGrid
-                  packs={packs}
+                  packs={visiblePacks}
                   folder={selectedFolder}
                   folderSources={folderSources}
                   textureOverrides={textureOverrides}
                   onOverride={handleOverride}
                   onOpenLightbox={(path, displayName, folder) => setLightbox({ path, displayName, folder })}
+                  cols={texturesPerRow}
                 />
               )}
             </div>
@@ -1422,13 +1763,40 @@ export default function App() {
           texturePath={lightbox.path}
           displayName={lightbox.displayName}
           folder={lightbox.folder}
-          packs={packs}
+          packs={visiblePacks}
           folderSources={folderSources}
           textureOverrides={textureOverrides}
           atlasRegionOverrides={atlasRegionOverrides}
           onOverride={handleOverride}
           onAtlasRegionOverride={handleAtlasRegionOverride}
           onClose={() => setLightbox(null)}
+        />
+      )}
+
+      {/* ── Settings modal ── */}
+      {settingsOpen && (
+        <SettingsModal
+          texturesPerRow={texturesPerRow}
+          onTexturesPerRowChange={setTexturesPerRow}
+          darkMode={darkMode}
+          onDarkModeChange={setDarkMode}
+          packName={packName}
+          packDescription={packDescription}
+          packIcon={packIcon}
+          onNameChange={setPackName}
+          onDescriptionChange={setPackDescription}
+          onIconFilePicked={(d) => { setSettingsOpen(false); setCropSource(d); }}
+          onIconRemove={() => setPackIcon(null)}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {/* ── Icon cropper ── */}
+      {cropSource && (
+        <ImageCropper
+          src={cropSource}
+          onCrop={(dataUrl) => { setPackIcon(dataUrl); setCropSource(null); }}
+          onCancel={() => setCropSource(null)}
         />
       )}
     </div>
