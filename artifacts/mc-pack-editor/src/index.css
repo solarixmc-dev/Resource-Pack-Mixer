@@ -66,13 +66,96 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* DARK MINECRAFT THEME */
+/* LIGHT / DARK MINECRAFT THEME */
 :root {
-  --button-outline: rgba(0,0,0, .15);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, 0.08);
+  --badge-outline: rgba(0, 0, 0, 0.04);
+  --opaque-button-border-intensity: 4;
+  --elevate-1: rgba(255, 255, 255, 0.7);
+  --elevate-2: rgba(255, 255, 255, 0.9);
+
+  --background: 210 30% 98%;
+  --foreground: 222 20% 12%;
+  --border: 220 13% 91%;
+  --input: 210 20% 96%;
+  --ring: 142 55% 40%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 20% 12%;
+  --card-border: 220 13% 91%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 20% 12%;
+  --popover-border: 220 13% 91%;
+
+  --primary: 142 55% 40%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 16% 94%;
+  --secondary-foreground: 222 20% 12%;
+
+  --muted: 210 16% 96%;
+  --muted-foreground: 220 8% 46%;
+
+  --accent: 210 16% 94%;
+  --accent-foreground: 222 20% 12%;
+
+  --destructive: 0 75% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  --chart-1: 142 55% 40%;
+  --chart-2: 217 80% 62%;
+  --chart-3: 0 65% 55%;
+  --chart-4: 38 90% 55%;
+  --chart-5: 280 60% 60%;
+
+  --sidebar: 210 20% 98%;
+  --sidebar-foreground: 222 20% 12%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-primary: 142 55% 40%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 210 16% 94%;
+  --sidebar-accent-foreground: 222 20% 12%;
+  --sidebar-ring: 142 55% 40%;
+
+  --app-font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: 'Fira Code', 'Cascadia Code', Menlo, monospace;
+  --radius: .375rem;
+
+  --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.08);
+  --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.12);
+  --shadow-sm: 0px 2px 4px 0px rgba(0, 0, 0, 0.08), 0px 1px 2px -1px rgba(0, 0, 0, 0.08);
+  --shadow: 0px 4px 6px -1px rgba(0, 0, 0, 0.08), 0px 2px 4px -2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0px 6px 8px -2px rgba(0, 0, 0, 0.08), 0px 2px 4px -2px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0px 10px 15px -3px rgba(0, 0, 0, 0.12), 0px 4px 6px -4px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0px 20px 25px -5px rgba(0, 0, 0, 0.12), 0px 8px 10px -6px rgba(0, 0, 0, 0.08);
+  --shadow-2xl: 0px 25px 50px -12px rgba(0, 0, 0, 0.18);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.dark {
+  --button-outline: rgba(255, 255, 255, 0.08);
+  --badge-outline: rgba(255, 255, 255, 0.04);
   --opaque-button-border-intensity: -6;
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
 
   --background: 222 20% 9%;
   --foreground: 210 15% 88%;

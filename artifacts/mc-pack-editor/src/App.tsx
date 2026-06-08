@@ -1466,7 +1466,11 @@ export default function App() {
   const [lightbox, setLightbox] = useState<{ path: string; displayName: string; folder: string } | null>(null);
   // Settings
   const [texturesPerRow, setTexturesPerRow] = useState(6);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = window.localStorage.getItem("mc-pack-editor-theme");
+    return saved ? saved === "dark" : true;
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Pack visibility: missing key = visible
   const [packVisibility, setPackVisibility] = useState<Record<string, boolean>>({});
@@ -1481,6 +1485,12 @@ export default function App() {
       return [...deduped, ...prev];
     });
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    document.documentElement.style.colorScheme = darkMode ? "dark" : "light";
+    window.localStorage.setItem("mc-pack-editor-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   const removePack = useCallback((id: string) => {
     setPacks((prev) => prev.filter((p) => p.id !== id));
