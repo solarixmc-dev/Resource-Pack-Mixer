@@ -1149,8 +1149,8 @@ function TextureLightbox({
 
           {/* Atlas region editor */}
           {atlasDef && packsWithFile.length > 0 && (
-            <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-3 py-2 bg-secondary/50 border-b border-border">
+            <div className="border border-border rounded-lg overflow-hidden max-h-[60vh] flex flex-col">
+              <div className="px-3 py-2 bg-secondary/50 border-b border-border flex-shrink-0">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {atlasDef.label} — Region Overrides
                 </span>
@@ -1182,7 +1182,7 @@ function TextureLightbox({
                   </div>
                 </div>
               </div>
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-border overflow-y-auto flex-1 min-h-0">
                 {atlasDef.regions.map((region) => {
                   const regionPackId = regionOverrides[region.id];
                   const regionOverridePack = packsWithFile.find(p => p.id === regionPackId);
