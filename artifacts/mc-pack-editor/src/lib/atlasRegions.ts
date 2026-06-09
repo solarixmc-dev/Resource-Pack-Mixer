@@ -22,18 +22,6 @@ export const ATLAS_DEFINITIONS: AtlasDefinition[] = [
     label: "HUD Icons Atlas",
     regions: [
       {
-        id: "hearts",
-        label: "Hearts",
-        x: 0, y: 0, w: 9, h: 9,
-        description: "Health heart sprite row",
-      },
-      {
-        id: "hunger",
-        label: "Hunger",
-        x: 0, y: 27, w: 9, h: 9,
-        description: "Food / hunger icon sprite row",
-      },
-      {
         id: "xpbar",
         label: "XP Bar",
         x: 0, y: 64, w: 182, h: 5,
@@ -44,6 +32,18 @@ export const ATLAS_DEFINITIONS: AtlasDefinition[] = [
         label: "Crosshair",
         x: 0, y: 0, w: 16, h: 16,
         description: "Center-screen crosshair sprite",
+      },
+      {
+        id: "hearts",
+        label: "Hearts",
+        x: 0, y: 0, w: 9, h: 9,
+        description: "Health heart sprite row",
+      },
+      {
+        id: "hunger",
+        label: "Hunger",
+        x: 0, y: 27, w: 9, h: 9,
+        description: "Food / hunger icon sprite row",
       },
       {
         id: "armor",
@@ -64,16 +64,16 @@ export const ATLAS_DEFINITIONS: AtlasDefinition[] = [
         description: "Hotbar background bar and slots",
       },
       {
-        id: "selected_slot",
-        label: "Selected Slot",
-        x: 0, y: 22, w: 24, h: 24,
-        description: "Selected hotbar slot highlight",
-      },
-      {
         id: "buttons",
         label: "Buttons",
         x: 0, y: 46, w: 200, h: 20,
         description: "UI button sprite row",
+      },
+      {
+        id: "selected_slot",
+        label: "Selected Slot",
+        x: 0, y: 22, w: 24, h: 24,
+        description: "Selected hotbar slot highlight",
       },
     ],
   },
