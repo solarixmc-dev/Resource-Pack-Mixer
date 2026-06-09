@@ -10,6 +10,7 @@ import {
   isImagePath,
   exportMergedPack,
   composeAtlas,
+  cropAtlasRegion,
 } from "./lib/zipUtils";
 import { getAtlasDefinition, AtlasDefinition } from "./lib/atlasRegions";
 
@@ -1046,6 +1047,43 @@ function TextureLightbox({
   const effectivePackId = overridePackId ?? folderPackId;
   const atlasDef = getAtlasDefinition(texturePath);
   const regionOverrides = atlasRegionOverrides[texturePath] ?? {};
+  const [regionPreviewUrls, setRegionPreviewUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!atlasDef || packsWithFile.length === 0) {
+      setRegionPreviewUrls({});
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const previews: Record<string, string> = {};
+      for (const region of atlasDef.regions) {
+        const regionPackId = regionOverrides[region.id] ?? effectivePackId;
+        const sourcePack = packsWithFile.find((p) => p.id === regionPackId) ?? packsWithFile[0];
+        const sourceBuffer = sourcePack?.files.get(texturePath);
+
+        if (!sourceBuffer) continue;
+
+        const cropped = await cropAtlasRegion(sourceBuffer, region);
+        previews[region.id] = arrayBufferToDataURL(cropped, texturePath);
+      }
+
+      if (!cancelled) setRegionPreviewUrls(previews);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [atlasDef, effectivePackId, packsWithFile, regionOverrides, texturePath]);
+
+  const previewRegion = useMemo(() => {
+    if (!atlasDef) return undefined;
+    return atlasDef.regions.find((region) => region.id === "crosshair")
+      ?? atlasDef.regions.find((region) => region.id === "hotbar_container")
+      ?? atlasDef.regions[0];
+  }, [atlasDef]);
 
   // Close on Escape
   useEffect(() => {
@@ -1120,6 +1158,30 @@ function TextureLightbox({
                   Pick a different pack for each region. On export, regions are composited onto the base atlas.
                 </p>
               </div>
+              <div className="px-3 py-3 border-b border-border bg-background/60">
+                <div className="flex items-start gap-3 flex-wrap">
+                  <div className="flex-1 min-w-[220px]">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">HUD preview</div>
+                    <p className="text-xs text-muted-foreground mt-1">This shows the selected GUI slice as it will appear in the atlas when the override is applied.</p>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-black/30 p-2">
+                    {previewRegion && regionPreviewUrls[previewRegion.id] ? (
+                      <img
+                        src={regionPreviewUrls[previewRegion.id]}
+                        alt={previewRegion.label}
+                        className="h-14 w-14 rounded-md border border-border bg-black/50 object-contain"
+                        style={{ imageRendering: "pixelated" }}
+                      />
+                    ) : (
+                      <div className="h-14 w-14 rounded-md border border-dashed border-border bg-black/30" />
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      <div className="font-semibold text-foreground">{previewRegion?.label ?? "Region"}</div>
+                      <div>Live slice preview</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div className="divide-y divide-border">
                 {atlasDef.regions.map((region) => {
                   const regionPackId = regionOverrides[region.id];
@@ -1133,6 +1195,16 @@ function TextureLightbox({
                         background: regionPackId ? "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(15,23,42,0.02))" : undefined,
                       }}
                     >
+                      {regionPreviewUrls[region.id] ? (
+                        <img
+                          src={regionPreviewUrls[region.id]}
+                          alt={region.label}
+                          className="h-10 w-10 rounded border border-border bg-black/40 object-contain flex-shrink-0"
+                          style={{ imageRendering: "pixelated" }}
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded border border-dashed border-border bg-black/30 flex-shrink-0" />
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{region.label}</span>
