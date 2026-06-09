@@ -122,7 +122,24 @@ export function isImagePath(path: string): boolean {
 
 async function readBitmap(buffer: ArrayBuffer): Promise<ImageBitmap> {
   const blob = new Blob([buffer], { type: "image/png" });
-  return createImageBitmap(blob);
+  return createImageBitmap(blob, { colorSpace: "display-p3" });
+}
+
+function createAlphaAwareCanvas(width: number, height: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d", {
+    alpha: true,
+    premultipliedAlpha: false,
+    willReadFrequently: true,
+  });
+
+  if (!ctx) throw new Error("Canvas 2D context is unavailable");
+
+  ctx.imageSmoothingEnabled = false;
+  return { canvas, ctx };
 }
 
 export async function cropAtlasRegion(
@@ -130,12 +147,7 @@ export async function cropAtlasRegion(
   region: AtlasRegion
 ): Promise<ArrayBuffer> {
   const bitmap = await readBitmap(buffer);
-  const canvas = document.createElement("canvas");
-  canvas.width = region.w;
-  canvas.height = region.h;
-
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) throw new Error("Canvas 2D context is unavailable");
+  const { canvas, ctx } = createAlphaAwareCanvas(region.w, region.h);
 
   ctx.clearRect(0, 0, region.w, region.h);
   ctx.drawImage(bitmap, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
@@ -164,12 +176,18 @@ export async function pasteAtlasRegion(
   canvas.width = targetBitmap.width;
   canvas.height = targetBitmap.height;
 
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const ctx = canvas.getContext("2d", {
+    alpha: true,
+    premultipliedAlpha: false,
+    willReadFrequently: true,
+  });
   if (!ctx) throw new Error("Canvas 2D context is unavailable");
 
+  ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(targetBitmap, 0, 0);
   ctx.clearRect(region.x, region.y, region.w, region.h);
+  ctx.globalCompositeOperation = "source-over";
   ctx.drawImage(patchBitmap, 0, 0, region.w, region.h, region.x, region.y, region.w, region.h);
 
   targetBitmap.close();
@@ -206,7 +224,14 @@ export async function composeAtlas(
   const canvas = document.createElement("canvas");
   canvas.width = baseBitmap.width;
   canvas.height = baseBitmap.height;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d", {
+    alpha: true,
+    premultipliedAlpha: false,
+    willReadFrequently: true,
+  });
+  if (!ctx) throw new Error("Canvas 2D context is unavailable");
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(baseBitmap, 0, 0);
   baseBitmap.close();
 
