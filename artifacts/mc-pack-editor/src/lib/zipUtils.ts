@@ -120,6 +120,31 @@ export function isImagePath(path: string): boolean {
   return /\.(png|jpg|jpeg|gif)$/i.test(path);
 }
 
+const LINKED_ATLAS_REGIONS: Record<string, string[]> = {
+  heart_full: ["heart_empty", "heart_empty_flash", "heart_full_damage", "heart_half_damage"],
+  heart_half: ["heart_empty", "heart_empty_flash", "heart_full_damage", "heart_half_damage"],
+  heart_full_damage: ["heart_empty", "heart_empty_flash"],
+  heart_half_damage: ["heart_empty", "heart_empty_flash"],
+  armor_full: ["armor_empty"],
+  armor_half: ["armor_empty"],
+  hunger_full: ["hunger_empty"],
+  hunger_half: ["hunger_empty"],
+};
+
+export function getLinkedAtlasRegionOverrides(
+  regionOverrides: Record<string, string>
+): Record<string, string> {
+  const linked = { ...regionOverrides };
+
+  for (const [regionId, packId] of Object.entries(regionOverrides)) {
+    for (const linkedRegionId of LINKED_ATLAS_REGIONS[regionId] ?? []) {
+      linked[linkedRegionId] ??= packId;
+    }
+  }
+
+  return linked;
+}
+
 async function loadImage(buffer: ArrayBuffer, path: string): Promise<HTMLImageElement> {
   const dataUrl = arrayBufferToDataURL(buffer, path);
   return new Promise((resolve, reject) => {
@@ -368,6 +393,7 @@ export async function exportMergedPack(
       const atlasDef = getAtlasDefinition(path);
       const regionOverrides = atlasRegionOverrides[path];
       if (atlasDef && regionOverrides && Object.keys(regionOverrides).length > 0) {
+        const linkedRegionOverrides = getLinkedAtlasRegionOverrides(regionOverrides);
         const patches: { region: AtlasRegion; buffer: ArrayBuffer }[] = [];
         const orderedRegions = [...atlasDef.regions].sort((a, b) => {
           const areaA = a.w * a.h;
@@ -376,7 +402,7 @@ export async function exportMergedPack(
         });
 
         for (const region of orderedRegions) {
-          const overridePackId = regionOverrides[region.id];
+          const overridePackId = linkedRegionOverrides[region.id];
           if (!overridePackId) continue;
 
           const overridePack = packs.find((p) => p.id === overridePackId && p.files.has(path));

@@ -19,8 +19,11 @@ export interface AtlasDefinition {
 const ICONS_REGIONS: AtlasRegion[] = [
   { id: "crosshair", label: "Crosshair", x: 0, y: 0, w: 16, h: 16, description: "Center-screen crosshair" },
   { id: "heart_empty", label: "Heart (Empty)", x: 16, y: 0, w: 9, h: 9, description: "Empty heart icon" },
+  { id: "heart_empty_flash", label: "Heart (Empty Flash)", x: 25, y: 0, w: 9, h: 9, description: "Flashing empty heart outline" },
   { id: "heart_full", label: "Heart (Full)", x: 52, y: 0, w: 9, h: 9, description: "Full heart icon" },
   { id: "heart_half", label: "Heart (Half)", x: 61, y: 0, w: 9, h: 9, description: "Half heart icon" },
+  { id: "heart_full_damage", label: "Heart (Damage Full)", x: 70, y: 0, w: 9, h: 9, description: "Recently lost full heart overlay" },
+  { id: "heart_half_damage", label: "Heart (Damage Half)", x: 79, y: 0, w: 9, h: 9, description: "Recently lost half heart overlay" },
   { id: "armor_empty", label: "Armor (Empty)", x: 16, y: 9, w: 9, h: 9, description: "Empty armor icon" },
   { id: "armor_full", label: "Armor (Full)", x: 34, y: 9, w: 9, h: 9, description: "Full armor icon" },
   { id: "armor_half", label: "Armor (Half)", x: 25, y: 9, w: 9, h: 9, description: "Half armor icon" },
