@@ -120,9 +120,14 @@ export function isImagePath(path: string): boolean {
   return /\.(png|jpg|jpeg|gif)$/i.test(path);
 }
 
-async function readBitmap(buffer: ArrayBuffer): Promise<ImageBitmap> {
-  const blob = new Blob([buffer], { type: "image/png" });
-  return createImageBitmap(blob, { colorSpace: "display-p3" });
+async function loadImage(buffer: ArrayBuffer, path: string): Promise<HTMLImageElement> {
+  const dataUrl = arrayBufferToDataURL(buffer, path);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load atlas image: ${path}`));
+    img.src = dataUrl;
+  });
 }
 
 function createAlphaAwareCanvas(width: number, height: number) {
@@ -144,14 +149,14 @@ function createAlphaAwareCanvas(width: number, height: number) {
 
 export async function cropAtlasRegion(
   buffer: ArrayBuffer,
-  region: AtlasRegion
+  region: AtlasRegion,
+  path: string = "atlas.png"
 ): Promise<ArrayBuffer> {
-  const bitmap = await readBitmap(buffer);
+  const img = await loadImage(buffer, path);
   const { canvas, ctx } = createAlphaAwareCanvas(region.w, region.h);
 
   ctx.clearRect(0, 0, region.w, region.h);
-  ctx.drawImage(bitmap, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
-  bitmap.close();
+  ctx.drawImage(img, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -167,10 +172,11 @@ export async function cropAtlasRegion(
 export async function pasteAtlasRegion(
   targetBuffer: ArrayBuffer,
   patchBuffer: ArrayBuffer,
-  region: AtlasRegion
+  region: AtlasRegion,
+  path: string = "atlas.png"
 ): Promise<ArrayBuffer> {
-  const targetBitmap = await readBitmap(targetBuffer);
-  const patchBitmap = await readBitmap(patchBuffer);
+  const targetImg = await loadImage(targetBuffer, path);
+  const patchImg = await loadImage(patchBuffer, path);
 
   const canvas = document.createElement("canvas");
   canvas.width = targetBitmap.width;
@@ -185,13 +191,10 @@ export async function pasteAtlasRegion(
 
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(targetBitmap, 0, 0);
+  ctx.drawImage(targetImg, 0, 0);
   ctx.clearRect(region.x, region.y, region.w, region.h);
   ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(patchBitmap, 0, 0, region.w, region.h, region.x, region.y, region.w, region.h);
-
-  targetBitmap.close();
-  patchBitmap.close();
+  ctx.drawImage(patchImg, 0, 0, region.w, region.h, region.x, region.y, region.w, region.h);
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -207,10 +210,11 @@ export async function pasteAtlasRegion(
 export async function replaceAtlasRegion(
   targetBuffer: ArrayBuffer,
   sourceBuffer: ArrayBuffer,
-  region: AtlasRegion
+  region: AtlasRegion,
+  path: string = "atlas.png"
 ): Promise<ArrayBuffer> {
-  const cropped = await cropAtlasRegion(sourceBuffer, region);
-  return pasteAtlasRegion(targetBuffer, cropped, region);
+  const cropped = await cropAtlasRegion(sourceBuffer, region, path);
+  return pasteAtlasRegion(targetBuffer, cropped, region, path);
 }
 
 /** Compose an atlas PNG by drawing region patches from other packs on top of a base atlas. */
@@ -337,7 +341,7 @@ export async function exportMergedPack(
           if (!overridePack) continue;
 
           const replacement = overridePack.files.get(path)!;
-          composed = await replaceAtlasRegion(composed, replacement, region);
+          composed = await replaceAtlasRegion(composed, replacement, region, path);
           didReplace = true;
         }
 
