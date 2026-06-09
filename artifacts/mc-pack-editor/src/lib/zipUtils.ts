@@ -120,6 +120,81 @@ export function isImagePath(path: string): boolean {
   return /\.(png|jpg|jpeg|gif)$/i.test(path);
 }
 
+async function readBitmap(buffer: ArrayBuffer): Promise<ImageBitmap> {
+  const blob = new Blob([buffer], { type: "image/png" });
+  return createImageBitmap(blob);
+}
+
+export async function cropAtlasRegion(
+  buffer: ArrayBuffer,
+  region: AtlasRegion
+): Promise<ArrayBuffer> {
+  const bitmap = await readBitmap(buffer);
+  const canvas = document.createElement("canvas");
+  canvas.width = region.w;
+  canvas.height = region.h;
+
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Canvas 2D context is unavailable");
+
+  ctx.clearRect(0, 0, region.w, region.h);
+  ctx.drawImage(bitmap, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
+  bitmap.close();
+
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Failed to encode cropped atlas region"));
+        return;
+      }
+      blob.arrayBuffer().then(resolve).catch(reject);
+    }, "image/png");
+  });
+}
+
+export async function pasteAtlasRegion(
+  targetBuffer: ArrayBuffer,
+  patchBuffer: ArrayBuffer,
+  region: AtlasRegion
+): Promise<ArrayBuffer> {
+  const targetBitmap = await readBitmap(targetBuffer);
+  const patchBitmap = await readBitmap(patchBuffer);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetBitmap.width;
+  canvas.height = targetBitmap.height;
+
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Canvas 2D context is unavailable");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(targetBitmap, 0, 0);
+  ctx.clearRect(region.x, region.y, region.w, region.h);
+  ctx.drawImage(patchBitmap, 0, 0, region.w, region.h, region.x, region.y, region.w, region.h);
+
+  targetBitmap.close();
+  patchBitmap.close();
+
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Failed to encode stitched atlas region"));
+        return;
+      }
+      blob.arrayBuffer().then(resolve).catch(reject);
+    }, "image/png");
+  });
+}
+
+export async function replaceAtlasRegion(
+  targetBuffer: ArrayBuffer,
+  sourceBuffer: ArrayBuffer,
+  region: AtlasRegion
+): Promise<ArrayBuffer> {
+  const cropped = await cropAtlasRegion(sourceBuffer, region);
+  return pasteAtlasRegion(targetBuffer, cropped, region);
+}
+
 /** Compose an atlas PNG by drawing region patches from other packs on top of a base atlas. */
 export async function composeAtlas(
   baseBuffer: ArrayBuffer,
