@@ -486,6 +486,38 @@ const MC_FORMATS = [
   { code: "§r", label: "R",   title: "Reset (§r)",       style: {} },
 ];
 
+type UploadDefaults = {
+  name: string;
+  description: string;
+  icon: string | null;
+};
+
+const DEFAULT_UPLOAD_DEFAULTS: UploadDefaults = {
+  name: "My Resource Pack",
+  description: "A Minecraft 1.8 Resource Pack",
+  icon: null,
+};
+
+function readUploadDefaults(): UploadDefaults {
+  if (typeof window === "undefined") return DEFAULT_UPLOAD_DEFAULTS;
+
+  try {
+    const saved = window.localStorage.getItem("mc-pack-editor-upload-defaults");
+    if (!saved) return DEFAULT_UPLOAD_DEFAULTS;
+
+    const parsed = JSON.parse(saved) as Partial<UploadDefaults>;
+    return {
+      name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : DEFAULT_UPLOAD_DEFAULTS.name,
+      description: typeof parsed.description === "string" && parsed.description.trim()
+        ? parsed.description
+        : DEFAULT_UPLOAD_DEFAULTS.description,
+      icon: typeof parsed.icon === "string" ? parsed.icon : null,
+    };
+  } catch {
+    return DEFAULT_UPLOAD_DEFAULTS;
+  }
+}
+
 // ─── Pack Settings ─────────────────────────────────────────────────────────────
 
 function PackSettings({
@@ -1297,26 +1329,26 @@ function SettingsModal({
   onTexturesPerRowChange,
   darkMode,
   onDarkModeChange,
-  packName,
-  packDescription,
-  packIcon,
-  onNameChange,
-  onDescriptionChange,
-  onIconFilePicked,
-  onIconRemove,
+  defaultPackName,
+  defaultPackDescription,
+  defaultPackIcon,
+  onDefaultNameChange,
+  onDefaultDescriptionChange,
+  onDefaultIconChange,
+  onDefaultIconRemove,
   onClose,
 }: {
   texturesPerRow: number;
   onTexturesPerRowChange: (n: number) => void;
   darkMode: boolean;
   onDarkModeChange: (v: boolean) => void;
-  packName: string;
-  packDescription: string;
-  packIcon: string | null;
-  onNameChange: (v: string) => void;
-  onDescriptionChange: (v: string) => void;
-  onIconFilePicked: (dataUrl: string) => void;
-  onIconRemove: () => void;
+  defaultPackName: string;
+  defaultPackDescription: string;
+  defaultPackIcon: string | null;
+  onDefaultNameChange: (v: string) => void;
+  onDefaultDescriptionChange: (v: string) => void;
+  onDefaultIconChange: (dataUrl: string) => void;
+  onDefaultIconRemove: () => void;
   onClose: () => void;
 }) {
   const iconInputRef = useRef<HTMLInputElement>(null);
@@ -1331,7 +1363,7 @@ function SettingsModal({
     const f = e.target.files?.[0];
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = () => onIconFilePicked(reader.result as string);
+    reader.onload = () => onDefaultIconChange(reader.result as string);
     reader.readAsDataURL(f);
     e.target.value = "";
   };
@@ -1387,9 +1419,9 @@ function SettingsModal({
           </div>
         </div>
 
-        {/* Pack defaults */}
+{/* Upload defaults */}
         <div className="px-4 py-3 flex flex-col gap-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Output Pack</span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Upload defaults</span>
 
           {/* Icon */}
           <div className="flex items-center gap-3">
@@ -1399,34 +1431,34 @@ function SettingsModal({
                 onClick={() => iconInputRef.current?.click()}
                 title="Click to set pack icon"
               >
-                {packIcon ? (
-                  <img src={packIcon} className="w-full h-full object-cover texture-preview" />
+                {defaultPackIcon ? (
+                  <img src={defaultPackIcon} className="w-full h-full object-cover texture-preview" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-2xl">📦</div>
                 )}
               </button>
-              {packIcon && (
+              {defaultPackIcon && (
                 <button
                   className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center hover:opacity-90"
-                  onClick={onIconRemove}
+                  onClick={onDefaultIconRemove}
                   title="Remove icon"
                 >✕</button>
               )}
             </div>
             <input ref={iconInputRef} type="file" accept="image/*" className="hidden" onChange={handleIconFile} />
             <div className="flex-1 text-xs text-muted-foreground">
-              {packIcon ? "Click icon to replace" : "Click icon to upload"}
-              <br />Will be saved as pack.png
+              {defaultPackIcon ? "Click icon to replace" : "Click icon to upload"}
+              <br />These values are used as defaults for new uploads.
             </div>
           </div>
 
           {/* Name */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Pack name</label>
+            <label className="text-xs text-muted-foreground">Default pack name</label>
             <input
               type="text"
-              value={packName}
-              onChange={(e) => onNameChange(e.target.value)}
+              value={defaultPackName}
+              onChange={(e) => onDefaultNameChange(e.target.value)}
               className="bg-secondary border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
               placeholder="My Resource Pack"
             />
@@ -1434,11 +1466,11 @@ function SettingsModal({
 
           {/* Description */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Description (pack.mcmeta)</label>
+            <label className="text-xs text-muted-foreground">Default description (pack.mcmeta)</label>
             <input
               type="text"
-              value={packDescription}
-              onChange={(e) => onDescriptionChange(e.target.value)}
+              value={defaultPackDescription}
+              onChange={(e) => onDefaultDescriptionChange(e.target.value)}
               className="bg-secondary border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
               placeholder="A Minecraft resource pack"
             />
@@ -1457,9 +1489,10 @@ export default function App() {
   const [folderSources, setFolderSources] = useState<FolderSources>({});
   const [textureOverrides, setTextureOverrides] = useState<TextureOverrides>({});
   const [atlasRegionOverrides, setAtlasRegionOverrides] = useState<Record<string, Record<string, string>>>({});
-  const [packName, setPackName] = useState("My Resource Pack");
-  const [packDescription, setPackDescription] = useState("A Minecraft 1.8 Resource Pack");
-  const [packIcon, setPackIcon] = useState<string | null>(null);
+  const [uploadDefaults, setUploadDefaults] = useState<UploadDefaults>(() => readUploadDefaults());
+  const [packName, setPackName] = useState(uploadDefaults.name);
+  const [packDescription, setPackDescription] = useState(uploadDefaults.description);
+  const [packIcon, setPackIcon] = useState<string | null>(uploadDefaults.icon);
   const [exporting, setExporting] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [globalSearch, setGlobalSearch] = useState("");
@@ -1484,13 +1517,27 @@ export default function App() {
       // Newest uploads go to the front (highest priority), like in-game behavior
       return [...deduped, ...prev];
     });
-  }, []);
+
+    setPackName(uploadDefaults.name);
+    setPackDescription(uploadDefaults.description);
+    setPackIcon(uploadDefaults.icon);
+  }, [uploadDefaults]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
     document.documentElement.style.colorScheme = darkMode ? "dark" : "light";
     window.localStorage.setItem("mc-pack-editor-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem("mc-pack-editor-upload-defaults", JSON.stringify(uploadDefaults));
+  }, [uploadDefaults]);
+
+  useEffect(() => {
+    setPackName(uploadDefaults.name);
+    setPackDescription(uploadDefaults.description);
+    setPackIcon(uploadDefaults.icon);
+  }, [uploadDefaults]);
 
   const removePack = useCallback((id: string) => {
     setPacks((prev) => prev.filter((p) => p.id !== id));
@@ -1790,13 +1837,13 @@ export default function App() {
           onTexturesPerRowChange={setTexturesPerRow}
           darkMode={darkMode}
           onDarkModeChange={setDarkMode}
-          packName={packName}
-          packDescription={packDescription}
-          packIcon={packIcon}
-          onNameChange={setPackName}
-          onDescriptionChange={setPackDescription}
-          onIconFilePicked={(d) => { setSettingsOpen(false); setCropSource(d); }}
-          onIconRemove={() => setPackIcon(null)}
+          defaultPackName={uploadDefaults.name}
+          defaultPackDescription={uploadDefaults.description}
+          defaultPackIcon={uploadDefaults.icon}
+          onDefaultNameChange={(value) => setUploadDefaults((prev) => ({ ...prev, name: value }))}
+          onDefaultDescriptionChange={(value) => setUploadDefaults((prev) => ({ ...prev, description: value }))}
+          onDefaultIconChange={(dataUrl) => setUploadDefaults((prev) => ({ ...prev, icon: dataUrl }))}
+          onDefaultIconRemove={() => setUploadDefaults((prev) => ({ ...prev, icon: null }))}
           onClose={() => setSettingsOpen(false)}
         />
       )}
