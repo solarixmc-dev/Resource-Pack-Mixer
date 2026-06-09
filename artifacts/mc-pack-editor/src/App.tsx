@@ -1048,10 +1048,12 @@ function TextureLightbox({
   const atlasDef = getAtlasDefinition(texturePath);
   const regionOverrides = atlasRegionOverrides[texturePath] ?? {};
   const [regionPreviewUrls, setRegionPreviewUrls] = useState<Record<string, string>>({});
+  const [composedPreviewUrl, setComposedPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!atlasDef || packsWithFile.length === 0) {
       setRegionPreviewUrls({});
+      setComposedPreviewUrl(null);
       return;
     }
 
@@ -1059,6 +1061,8 @@ function TextureLightbox({
 
     (async () => {
       const previews: Record<string, string> = {};
+      const patches: { region: AtlasDefinition["regions"][number]; buffer: ArrayBuffer }[] = [];
+
       for (const region of atlasDef.regions) {
         const regionPackId = regionOverrides[region.id] ?? effectivePackId;
         const sourcePack = packsWithFile.find((p) => p.id === regionPackId) ?? packsWithFile[0];
@@ -1066,11 +1070,29 @@ function TextureLightbox({
 
         if (!sourceBuffer) continue;
 
-        const cropped = await cropAtlasRegion(sourceBuffer, region);
+        const cropped = await cropAtlasRegion(sourceBuffer, region, texturePath);
         previews[region.id] = arrayBufferToDataURL(cropped, texturePath);
+
+        if (regionPackId && regionPackId !== (effectivePackId ?? "")) {
+          patches.push({ region, buffer: sourceBuffer });
+        }
       }
 
-      if (!cancelled) setRegionPreviewUrls(previews);
+      if (!cancelled) {
+        setRegionPreviewUrls(previews);
+
+        if (patches.length > 0) {
+          const base = packsWithFile.find((p) => p.id === (effectivePackId ?? packsWithFile[0]?.id))?.files.get(texturePath);
+          if (base) {
+            const composed = await composeAtlas(base, patches);
+            setComposedPreviewUrl(arrayBufferToDataURL(composed, texturePath));
+          } else {
+            setComposedPreviewUrl(null);
+          }
+        } else {
+          setComposedPreviewUrl(null);
+        }
+      }
     })();
 
     return () => {
@@ -1115,7 +1137,8 @@ function TextureLightbox({
 
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
           {/* Image previews */}
-          <div className={`flex gap-3 flex-wrap ${packsWithFile.length === 1 ? "justify-center" : ""}`}>
+          <div className="flex flex-wrap gap-3 items-start">
+            <div className={`flex gap-3 flex-wrap ${packsWithFile.length === 1 ? "justify-center" : ""}`}>
             {packsWithFile.map((pack) => {
               const buf = pack.files.get(texturePath)!;
               const url = arrayBufferToDataURL(buf, texturePath);
@@ -1145,6 +1168,20 @@ function TextureLightbox({
                 </div>
               );
             })}
+            </div>
+
+            {atlasDef && composedPreviewUrl && (
+              <div className="flex flex-col gap-2 rounded-xl border border-border bg-secondary/30 p-3 min-w-[220px]">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">New atlas preview</div>
+                <img
+                  src={composedPreviewUrl}
+                  alt="Preview of the atlas after region overrides"
+                  className="w-40 h-40 rounded-md border border-border bg-black/50 object-contain"
+                  style={{ imageRendering: "pixelated" }}
+                />
+                <p className="text-xs text-muted-foreground">This updates live as you switch atlas regions.</p>
+              </div>
+            )}
           </div>
 
           {/* Atlas region editor */}
