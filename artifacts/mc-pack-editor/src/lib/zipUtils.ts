@@ -155,8 +155,12 @@ export async function cropAtlasRegion(
   const img = await loadImage(buffer, path);
   const { canvas, ctx } = createAlphaAwareCanvas(region.w, region.h);
 
+  ctx.save();
+  ctx.globalCompositeOperation = "copy";
   ctx.clearRect(0, 0, region.w, region.h);
+  ctx.globalCompositeOperation = "source-over";
   ctx.drawImage(img, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
+  ctx.restore();
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -192,7 +196,10 @@ export async function pasteAtlasRegion(
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(targetImg, 0, 0);
-  ctx.clearRect(region.x, region.y, region.w, region.h);
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.fillRect(region.x, region.y, region.w, region.h);
+  ctx.restore();
   ctx.globalCompositeOperation = "source-over";
   ctx.drawImage(patchImg, 0, 0, region.w, region.h, region.x, region.y, region.w, region.h);
 
