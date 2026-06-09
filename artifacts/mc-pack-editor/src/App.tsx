@@ -1127,11 +1127,17 @@ function TextureLightbox({
                   return (
                     <div
                       key={region.id}
-                      className="flex items-center gap-3 px-3 py-2.5 border-l-4 transition-colors"
-                      style={{ borderLeftColor: regionOverridePack ? regionOverridePack.color : "transparent" }}
+                      className={`flex items-center gap-3 px-3 py-2.5 border-l-4 transition-colors ${regionPackId ? "shadow-[inset_0_0_0_1px_rgba(74,222,128,0.35)]" : ""}`}
+                      style={{
+                        borderLeftColor: regionOverridePack ? regionOverridePack.color : "transparent",
+                        background: regionPackId ? "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(15,23,42,0.02))" : undefined,
+                      }}
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">{region.label}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{region.label}</span>
+                          {regionPackId && <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 font-semibold">override</span>}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {region.description} · ({region.x},{region.y}) {region.w}×{region.h}px
                         </div>
@@ -1640,7 +1646,12 @@ export default function App() {
     [packs, packVisibility]
   );
 
-  const overrideCount = Object.keys(textureOverrides).length;
+  const textureOverrideCount = Object.keys(textureOverrides).length;
+  const atlasRegionOverrideCount = Object.values(atlasRegionOverrides).reduce(
+    (sum, regionOverrides) => sum + Object.keys(regionOverrides).length,
+    0,
+  );
+  const totalOverrideCount = textureOverrideCount + atlasRegionOverrideCount;
   const folderSourceCount = Object.values(folderSources).filter(Boolean).length;
 
   return (
@@ -1713,10 +1724,17 @@ export default function App() {
           <div className="flex-shrink-0 w-64">
             <DropZone onLoad={handlePacksLoaded} />
           </div>
-          {(overrideCount > 0 || folderSourceCount > 0) && (
+          {(totalOverrideCount > 0 || folderSourceCount > 0) && (
             <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
               {folderSourceCount > 0 && <span>📁 {folderSourceCount} folder source{folderSourceCount !== 1 ? "s" : ""} set</span>}
-              {overrideCount > 0 && <span>🎯 {overrideCount} texture override{overrideCount !== 1 ? "s" : ""}</span>}
+              {totalOverrideCount > 0 && (
+                <span>
+                  🎯 {totalOverrideCount} override{totalOverrideCount !== 1 ? "s" : ""} total
+                  {atlasRegionOverrideCount > 0 && (
+                    <> ({textureOverrideCount} texture, {atlasRegionOverrideCount} atlas region{atlasRegionOverrideCount !== 1 ? "s" : ""})</>
+                  )}
+                </span>
+              )}
             </div>
           )}
         </div>
