@@ -130,6 +130,21 @@ async function loadImage(buffer: ArrayBuffer, path: string): Promise<HTMLImageEl
   });
 }
 
+function normalizeRegionForCanvas(region: AtlasRegion, width: number, height: number): AtlasRegion {
+  if (width <= 0 || height <= 0) return region;
+
+  const scaleX = width / 256;
+  const scaleY = height / 256;
+
+  return {
+    ...region,
+    x: Math.round(region.x * scaleX),
+    y: Math.round(region.y * scaleY),
+    w: Math.max(1, Math.round(region.w * scaleX)),
+    h: Math.max(1, Math.round(region.h * scaleY)),
+  };
+}
+
 function createAlphaAwareCanvas(width: number, height: number) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -153,13 +168,14 @@ export async function cropAtlasRegion(
   path: string = "atlas.png"
 ): Promise<ArrayBuffer> {
   const img = await loadImage(buffer, path);
-  const { canvas, ctx } = createAlphaAwareCanvas(region.w, region.h);
+  const sourceRegion = normalizeRegionForCanvas(region, img.naturalWidth, img.naturalHeight);
+  const { canvas, ctx } = createAlphaAwareCanvas(sourceRegion.w, sourceRegion.h);
 
   ctx.save();
   ctx.globalCompositeOperation = "copy";
-  ctx.clearRect(0, 0, region.w, region.h);
+  ctx.clearRect(0, 0, sourceRegion.w, sourceRegion.h);
   ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(img, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
+  ctx.drawImage(img, sourceRegion.x, sourceRegion.y, sourceRegion.w, sourceRegion.h, 0, 0, sourceRegion.w, sourceRegion.h);
   ctx.restore();
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
@@ -182,9 +198,11 @@ export async function pasteAtlasRegion(
   const targetImg = await loadImage(targetBuffer, path);
   const patchImg = await loadImage(patchBuffer, path);
 
+  const destRegion = normalizeRegionForCanvas(region, targetImg.naturalWidth, targetImg.naturalHeight);
+
   const canvas = document.createElement("canvas");
-  canvas.width = targetBitmap.width;
-  canvas.height = targetBitmap.height;
+  canvas.width = targetImg.naturalWidth;
+  canvas.height = targetImg.naturalHeight;
 
   const ctx = canvas.getContext("2d", {
     alpha: true,
@@ -198,10 +216,20 @@ export async function pasteAtlasRegion(
   ctx.drawImage(targetImg, 0, 0);
   ctx.save();
   ctx.globalCompositeOperation = "destination-out";
-  ctx.fillRect(region.x, region.y, region.w, region.h);
+  ctx.fillRect(destRegion.x, destRegion.y, destRegion.w, destRegion.h);
   ctx.restore();
   ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(patchImg, 0, 0, region.w, region.h, region.x, region.y, region.w, region.h);
+  ctx.drawImage(
+    patchImg,
+    0,
+    0,
+    patchImg.naturalWidth,
+    patchImg.naturalHeight,
+    destRegion.x,
+    destRegion.y,
+    destRegion.w,
+    destRegion.h,
+  );
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     canvas.toBlob((blob) => {
