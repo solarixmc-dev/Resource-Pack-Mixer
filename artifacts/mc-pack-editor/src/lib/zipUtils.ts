@@ -265,11 +265,19 @@ export async function composeAtlas(
   patches: { region: AtlasRegion; buffer: ArrayBuffer }[]
 ): Promise<ArrayBuffer> {
   const baseImg = await loadImage(baseBuffer, "atlas.png");
-  const { canvas, ctx } = createAlphaAwareCanvas(baseImg.naturalWidth, baseImg.naturalHeight);
-  ctx.drawImage(baseImg, 0, 0);
+  const patchImages = await Promise.all(
+    patches.map(async (patch) => ({
+      ...patch,
+      img: await loadImage(patch.buffer, "atlas.png"),
+    }))
+  );
 
-  for (const { region, buffer } of patches) {
-    const patchImg = await loadImage(buffer, "atlas.png");
+  const outputWidth = Math.max(baseImg.naturalWidth, ...patchImages.map((patch) => patch.img.naturalWidth));
+  const outputHeight = Math.max(baseImg.naturalHeight, ...patchImages.map((patch) => patch.img.naturalHeight));
+  const { canvas, ctx } = createAlphaAwareCanvas(outputWidth, outputHeight);
+  ctx.drawImage(baseImg, 0, 0, outputWidth, outputHeight);
+
+  for (const { region, img: patchImg } of patchImages) {
     const sourceRegion = normalizeRegionForCanvas(region, patchImg.naturalWidth, patchImg.naturalHeight);
     const destRegion = normalizeRegionForCanvas(region, canvas.width, canvas.height);
     ctx.clearRect(destRegion.x, destRegion.y, destRegion.w, destRegion.h);
