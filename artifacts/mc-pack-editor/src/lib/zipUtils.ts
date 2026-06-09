@@ -169,14 +169,17 @@ export async function cropAtlasRegion(
 ): Promise<ArrayBuffer> {
   const img = await loadImage(buffer, path);
   const sourceRegion = normalizeRegionForCanvas(region, img.naturalWidth, img.naturalHeight);
-  const { canvas, ctx } = createAlphaAwareCanvas(sourceRegion.w, sourceRegion.h);
 
-  ctx.save();
-  ctx.globalCompositeOperation = "copy";
-  ctx.clearRect(0, 0, sourceRegion.w, sourceRegion.h);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(img, sourceRegion.x, sourceRegion.y, sourceRegion.w, sourceRegion.h, 0, 0, sourceRegion.w, sourceRegion.h);
-  ctx.restore();
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = img.naturalWidth;
+  tempCanvas.height = img.naturalHeight;
+  const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
+  if (!tempCtx) throw new Error("Canvas 2D context is unavailable");
+  tempCtx.drawImage(img, 0, 0);
+
+  const sourceData = tempCtx.getImageData(sourceRegion.x, sourceRegion.y, sourceRegion.w, sourceRegion.h);
+  const { canvas, ctx } = createAlphaAwareCanvas(sourceRegion.w, sourceRegion.h);
+  ctx.putImageData(sourceData, 0, 0);
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -200,36 +203,40 @@ export async function pasteAtlasRegion(
 
   const destRegion = normalizeRegionForCanvas(region, targetImg.naturalWidth, targetImg.naturalHeight);
 
-  const canvas = document.createElement("canvas");
-  canvas.width = targetImg.naturalWidth;
-  canvas.height = targetImg.naturalHeight;
+  const tempTarget = document.createElement("canvas");
+  tempTarget.width = targetImg.naturalWidth;
+  tempTarget.height = targetImg.naturalHeight;
+  const targetCtx = tempTarget.getContext("2d", { willReadFrequently: true, alpha: true });
+  if (!targetCtx) throw new Error("Canvas 2D context is unavailable");
+  targetCtx.drawImage(targetImg, 0, 0);
 
-  const ctx = canvas.getContext("2d", {
-    alpha: true,
-    premultipliedAlpha: false,
-    willReadFrequently: true,
-  });
-  if (!ctx) throw new Error("Canvas 2D context is unavailable");
+  const tempPatch = document.createElement("canvas");
+  tempPatch.width = patchImg.naturalWidth;
+  tempPatch.height = patchImg.naturalHeight;
+  const patchCtx = tempPatch.getContext("2d", { willReadFrequently: true, alpha: true });
+  if (!patchCtx) throw new Error("Canvas 2D context is unavailable");
+  patchCtx.drawImage(patchImg, 0, 0);
 
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(targetImg, 0, 0);
-  ctx.save();
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.fillRect(destRegion.x, destRegion.y, destRegion.w, destRegion.h);
-  ctx.restore();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(
-    patchImg,
-    0,
-    0,
-    patchImg.naturalWidth,
-    patchImg.naturalHeight,
-    destRegion.x,
-    destRegion.y,
-    destRegion.w,
-    destRegion.h,
-  );
+  const targetData = targetCtx.getImageData(0, 0, tempTarget.width, tempTarget.height);
+  const patchData = patchCtx.getImageData(0, 0, tempPatch.width, tempPatch.height);
+
+  const patchW = patchImg.naturalWidth;
+  const patchH = patchImg.naturalHeight;
+
+  for (let y = 0; y < patchH; y++) {
+    for (let x = 0; x < patchW; x++) {
+      const srcIndex = (y * patchW + x) * 4;
+      const dstIndex = ((destRegion.y + y) * tempTarget.width + (destRegion.x + x)) * 4;
+
+      targetData.data[dstIndex + 0] = patchData.data[srcIndex + 0];
+      targetData.data[dstIndex + 1] = patchData.data[srcIndex + 1];
+      targetData.data[dstIndex + 2] = patchData.data[srcIndex + 2];
+      targetData.data[dstIndex + 3] = patchData.data[srcIndex + 3];
+    }
+  }
+
+  const { canvas, ctx } = createAlphaAwareCanvas(tempTarget.width, tempTarget.height);
+  ctx.putImageData(targetData, 0, 0);
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     canvas.toBlob((blob) => {
