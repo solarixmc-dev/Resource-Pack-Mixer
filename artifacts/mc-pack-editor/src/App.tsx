@@ -1049,6 +1049,19 @@ function TextureLightbox({
   const regionOverrides = atlasRegionOverrides[texturePath] ?? {};
   const [regionPreviewUrls, setRegionPreviewUrls] = useState<Record<string, string>>({});
   const [composedPreviewUrl, setComposedPreviewUrl] = useState<string | null>(null);
+  const [previewRegionId, setPreviewRegionId] = useState<string | null>(null);
+
+  const regionOverrideKey = useMemo(
+    () => Object.entries(regionOverrides)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([regionId, packId]) => `${regionId}:${packId}`)
+      .join("|"),
+    [regionOverrides]
+  );
+  const packFileKey = useMemo(
+    () => packsWithFile.map((p) => p.id).join("|"),
+    [packsWithFile]
+  );
 
   useEffect(() => {
     if (!atlasDef || packsWithFile.length === 0) {
@@ -1073,7 +1086,7 @@ function TextureLightbox({
         const cropped = await cropAtlasRegion(sourceBuffer, region, texturePath);
         previews[region.id] = arrayBufferToDataURL(cropped, texturePath);
 
-        if (regionPackId && regionPackId !== (effectivePackId ?? "")) {
+        if (regionOverrides[region.id]) {
           patches.push({ region, buffer: sourceBuffer });
         }
       }
@@ -1081,8 +1094,9 @@ function TextureLightbox({
       if (!cancelled) {
         setRegionPreviewUrls(previews);
 
+        const basePack = packsWithFile.find((p) => p.id === (effectivePackId ?? packsWithFile[0]?.id)) ?? packsWithFile[0];
         if (patches.length > 0) {
-          const base = packsWithFile.find((p) => p.id === (effectivePackId ?? packsWithFile[0]?.id))?.files.get(texturePath);
+          const base = basePack?.files.get(texturePath);
           if (base) {
             const composed = await composeAtlas(base, patches);
             setComposedPreviewUrl(arrayBufferToDataURL(composed, texturePath));
@@ -1098,14 +1112,15 @@ function TextureLightbox({
     return () => {
       cancelled = true;
     };
-  }, [atlasDef, effectivePackId, packsWithFile, regionOverrides, texturePath]);
+  }, [atlasDef, effectivePackId, packFileKey, regionOverrideKey, texturePath]);
 
   const previewRegion = useMemo(() => {
     if (!atlasDef) return undefined;
-    return atlasDef.regions.find((region) => region.id === "crosshair")
+    return atlasDef.regions.find((region) => region.id === previewRegionId)
+      ?? atlasDef.regions.find((region) => region.id === "crosshair")
       ?? atlasDef.regions.find((region) => region.id === "hotbar_container")
       ?? atlasDef.regions[0];
-  }, [atlasDef]);
+  }, [atlasDef, previewRegionId]);
 
   // Close on Escape
   useEffect(() => {
@@ -1223,13 +1238,16 @@ function TextureLightbox({
                 {atlasDef.regions.map((region) => {
                   const regionPackId = regionOverrides[region.id];
                   const regionOverridePack = packsWithFile.find(p => p.id === regionPackId);
+                  const isPreviewedRegion = previewRegion?.id === region.id;
                   return (
                     <div
                       key={region.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 border-l-4 transition-colors ${regionPackId ? "shadow-[inset_0_0_0_1px_rgba(74,222,128,0.35)]" : ""}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 border-l-4 transition-colors ${regionPackId ? "shadow-[inset_0_0_0_1px_rgba(74,222,128,0.35)]" : ""} ${isPreviewedRegion ? "bg-accent/40" : ""}`}
                       style={{
                         borderLeftColor: regionOverridePack ? regionOverridePack.color : "transparent",
-                        background: regionPackId ? "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(15,23,42,0.02))" : undefined,
+                        background: regionPackId
+                          ? "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(15,23,42,0.02))"
+                          : undefined,
                       }}
                     >
                       {regionPreviewUrls[region.id] ? (
@@ -1254,7 +1272,10 @@ function TextureLightbox({
                       <div className="flex gap-1 flex-wrap justify-end">
                         <button
                           className={`text-xs px-2 py-0.5 rounded transition-colors ${!regionPackId ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-accent"}`}
-                          onClick={() => onAtlasRegionOverride(texturePath, region.id, null)}
+                          onClick={() => {
+                            setPreviewRegionId(region.id);
+                            onAtlasRegionOverride(texturePath, region.id, null);
+                          }}
                         >
                           auto
                         </button>
@@ -1263,7 +1284,10 @@ function TextureLightbox({
                             key={p.id}
                             className={`text-xs px-2 py-0.5 rounded transition-colors max-w-[80px] truncate ${regionPackId === p.id ? "font-semibold" : "text-muted-foreground hover:bg-accent"}`}
                             style={regionPackId === p.id ? { background: p.color + "33", color: p.color } : {}}
-                            onClick={() => onAtlasRegionOverride(texturePath, region.id, regionPackId === p.id ? null : p.id)}
+                            onClick={() => {
+                              setPreviewRegionId(region.id);
+                              onAtlasRegionOverride(texturePath, region.id, regionPackId === p.id ? null : p.id);
+                            }}
                             title={p.name}
                           >
                             {p.name}
