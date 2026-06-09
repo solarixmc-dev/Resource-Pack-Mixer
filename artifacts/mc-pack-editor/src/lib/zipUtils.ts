@@ -316,26 +316,32 @@ export async function exportMergedPack(
     if (sourcePack) {
       const buf = sourcePack.files.get(path)!;
 
-      // If this is a known atlas with region-level overrides, compose it
+      // If this is a known atlas with region-level overrides, replace those boxes directly
       const atlasDef = getAtlasDefinition(path);
       const regionOverrides = atlasRegionOverrides[path];
       if (atlasDef && regionOverrides && Object.keys(regionOverrides).length > 0) {
-        const patches: { region: AtlasRegion; buffer: ArrayBuffer }[] = [];
         const orderedRegions = [...atlasDef.regions].sort((a, b) => {
           const areaA = a.w * a.h;
           const areaB = b.w * b.h;
           return areaB - areaA;
         });
+
+        let composed = buf;
+        let didReplace = false;
+
         for (const region of orderedRegions) {
           const overridePackId = regionOverrides[region.id];
           if (!overridePackId) continue;
+
           const overridePack = packs.find((p) => p.id === overridePackId && p.files.has(path));
-          if (overridePack) {
-            patches.push({ region, buffer: overridePack.files.get(path)! });
-          }
+          if (!overridePack) continue;
+
+          const replacement = overridePack.files.get(path)!;
+          composed = await replaceAtlasRegion(composed, replacement, region);
+          didReplace = true;
         }
-        if (patches.length > 0) {
-          const composed = await composeAtlas(buf, patches);
+
+        if (didReplace) {
           zip.file(path, composed);
           continue;
         }
