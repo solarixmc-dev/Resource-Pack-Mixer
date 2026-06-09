@@ -259,37 +259,31 @@ export async function replaceAtlasRegion(
   return pasteAtlasRegion(targetBuffer, cropped, region, path);
 }
 
-/** Compose an atlas PNG by drawing region patches from other packs on top of a base atlas. */
+/** Compose an atlas PNG by replacing region pixels from other packs on top of a base atlas. */
 export async function composeAtlas(
   baseBuffer: ArrayBuffer,
   patches: { region: AtlasRegion; buffer: ArrayBuffer }[]
 ): Promise<ArrayBuffer> {
-  const baseBlob = new Blob([baseBuffer], { type: "image/png" });
-  const baseBitmap = await createImageBitmap(baseBlob);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = baseBitmap.width;
-  canvas.height = baseBitmap.height;
-  const ctx = canvas.getContext("2d", {
-    alpha: true,
-    premultipliedAlpha: false,
-    willReadFrequently: true,
-  });
-  if (!ctx) throw new Error("Canvas 2D context is unavailable");
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(baseBitmap, 0, 0);
-  baseBitmap.close();
+  const baseImg = await loadImage(baseBuffer, "atlas.png");
+  const { canvas, ctx } = createAlphaAwareCanvas(baseImg.naturalWidth, baseImg.naturalHeight);
+  ctx.drawImage(baseImg, 0, 0);
 
   for (const { region, buffer } of patches) {
-    const patchBlob = new Blob([buffer], { type: "image/png" });
-    const patchBitmap = await createImageBitmap(patchBlob);
+    const patchImg = await loadImage(buffer, "atlas.png");
+    const sourceRegion = normalizeRegionForCanvas(region, patchImg.naturalWidth, patchImg.naturalHeight);
+    const destRegion = normalizeRegionForCanvas(region, canvas.width, canvas.height);
+    ctx.clearRect(destRegion.x, destRegion.y, destRegion.w, destRegion.h);
     ctx.drawImage(
-      patchBitmap,
-      region.x, region.y, region.w, region.h,
-      region.x, region.y, region.w, region.h
+      patchImg,
+      sourceRegion.x,
+      sourceRegion.y,
+      sourceRegion.w,
+      sourceRegion.h,
+      destRegion.x,
+      destRegion.y,
+      destRegion.w,
+      destRegion.h
     );
-    patchBitmap.close();
   }
 
   return new Promise<ArrayBuffer>((resolve) => {
